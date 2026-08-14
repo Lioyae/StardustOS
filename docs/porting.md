@@ -484,20 +484,30 @@ void star_assert_fail(const char *file, int line)
 
 ## 第 5 章：内存模型与 C51 语法限制
 
-### 5.1 内核的大数组住哪：idata 还是 xdata？
+### 5.1 内存模型：为什么必须 Large + XDATA（别用默认 SMALL）
 
-内核用 `STAR_STATIC` 声明几块大数组（事件队列、延时槽、任务槽，默认配置共约 280B）。8051 的 port 头把它映射到 `static idata`（Keil）/ `static __idata`（SDCC）——放在**内部 RAM**。STC8H/STC89 的内部 RAM 只有 256B，你的堆栈、局部变量也挤在这里。
+8051 的 DATA（直接寻址 RAM）只有 128 字节。内核标量（时基、链表头、丢计数等）约 25
+字节，加上各函数的局部变量/参数/临时变量，**SMALL 模型下 DATA 需求约 190 字节，直接
+链接报 `ERROR L107 ADDRESS SPACE OVERFLOW`**。所以 8051 工程必须这样配，三者缺一不可：
 
-STC8H 还有 **8KB XRAM**。内部 RAM 紧张时，定义 **`STAR_RAM_XDATA=1`** 把内核大数组整体搬到 XRAM，腾出内部 RAM 给堆栈：
+1. **Large 内存模型**：魔术棒 → Target 标签 → Memory Model 选 `Large`（局部变量/标量放 XDATA）
+2. **`STAR_RAM_XDATA=1`**：魔术棒 → C51 标签 → Define 填 `STAR_RAM_XDATA=1`（内核大数组放 XDATA）
+3. **STARTUP.A51 启用 reentrant 栈**：内核 handler 是 reentrant 函数指针，Keil 默认启动文件
+   没开 reentrant 栈（`XBPSTACK EQU 0`），不改成 1 会报 `?C_XBP` / `?C_IBP` 未定义。
+   模板已提供配好的 `STARTUP.A51`（`XDATALEN` 按芯片 XRAM 大小、`XBPSTACK=1`）
 
-```
-魔术棒 → C51 标签页 → Define 栏填：STAR_RAM_XDATA=1
-（SDCC 用：-DSTAR_RAM_XDATA=1）
-```
+配好后内核数据约 350 字节全进 XDATA，DATA 只留 10 字节左右。
 
-port 头里对应地变成 `static xdata`（Keil）/ `static __xdata`（SDCC）——宏是**工程级全局**定义，`star_port.c` 也要编译到，所以别只写在某个 .c 文件里。
+> 白话解释：DATA 是 128 字节的"市中心"，内核连同函数的临时草稿纸一起，默认全挤在市中心，
+> 当然爆仓。Large 模型把草稿纸和账本都搬到 XRAM"郊外大仓库"，市中心只留收发室。
+> 代价：访问 XRAM 慢一点、代码约大 30%（Large 模型要多几条指令）。
 
-> 白话解释：内部 RAM 是"寸土寸金"的市中心，XRAM 是郊外大仓库。大数组搬到仓库去，市中心留给堆栈。代价：访问 xdata 比 idata 慢一点，但对内核这种低频访问完全无感。**XRAM 很小的型号（如 STC89 系只有 512B）一般不值得搬**，优先压缩配置，或干脆不定义这个宏。
+**STC89C52 还要在代码里使能内部 XRAM**：`AUXR |= 0x02`（EXTRAM 位）——不使能则那 512B
+XRAM 读不到。STC8H 的内部 XRAM 复位后默认可用。
+
+**STC89C52RC 的 Flash 只有 8KB**：全功能（任务层+邮箱）在 Large 模型下约 8.7KB，放不下。
+精简：`STAR_ENABLE_TASK=0`、`STAR_ENABLE_MAILBOX=0`（必要时再减 `STAR_EVT_QUEUE_SIZE`、
+`STAR_DELAYED_MAX`），code 降到约 6KB。STC8H（64KB Flash）、STC32G 无此限制。
 
 ### 5.2 8051 和 251 的差别
 

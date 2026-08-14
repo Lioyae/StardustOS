@@ -30,8 +30,15 @@
 **打开工程提示「Device not found」或器件未识别？**
 工程模板用通用型号占位（8051 用 AT89C52、80251 用 8xC251SB），如果你的 Keil 没装这些型号，µVision 会提示。解决：`Project → Options for Target → Device` 里手动选一个你 Keil 里有的 8051/251 型号（或先用 STC-ISP 添加 STC 型号再选）。**这不会影响编译结果**——STC8H/STC89C52 指令兼容 8051，STC32G 兼容 80251。
 
-**想在 STC8H 上把内核数据搬到 XRAM？**
-在 `Project → Options for Target → C51` 的「Define」里加 `STAR_RAM_XDATA=1`，并在 `Target` 标签把 XRAM 配成实际大小（STC8H 有 8KB）。详见 `docs/porting.md` 第 5 章。
+**为什么工程用 Large 内存模型？**
+8051 的 128 字节 DATA（直接寻址 RAM）装不下内核的标量 + 函数局部变量——SMALL 模型下会报 `ERROR L107 ADDRESS SPACE OVERFLOW`。所以模板已默认配好三件事：
+1. **Large 内存模型**：局部变量/标量放 XDATA
+2. **`STAR_RAM_XDATA=1`**：内核大数组（事件队列/延时槽/任务槽）也放 XDATA
+3. **`STARTUP.A51`** 已启用 LARGE reentrant 栈：内核 handler 是 reentrant 函数指针，不启用会报 `?C_XBP` / `?C_IBP` 未定义
+
+**STC89C52 要额外使能内部 XRAM**：例程 `main.c` 已写 `AUXR |= 0x02`（EXTRAM 位）——不使能则 512B 内部 XRAM 不可用，访问会出错。STC8H 的内部 XRAM 复位后默认可用。
+
+**STC89C52RC 的 Flash 只有 8KB**：内核全功能（含任务层+邮箱）在 Large 模型下约 8.7KB，放不下。请精简配置：`STAR_ENABLE_TASK=0`、`STAR_ENABLE_MAILBOX=0`（必要时再减小 `STAR_EVT_QUEUE_SIZE`、`STAR_DELAYED_MAX`），code 可降到约 6KB。STC8H（64KB Flash）、STC32G 无此限制。
 
 **SDCC 怎么编译？**
 SDCC 是开源 8051 编译器，Linux/Windows 都能用，已进 CI。命令行：

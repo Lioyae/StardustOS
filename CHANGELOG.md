@@ -32,6 +32,7 @@
 - **8051/251 低功耗死机隐患**：`star_idle` 默认空转（原实现把 ARM wfi 的"关中断 + pending 唤醒"语义硬搬到 8051，可能上电睡死）；定义 `STAR_PORT_IDLE` 启用 PCON IDL 时，由实现自行"进 IDL 前临时开中断、唤醒后重新关中断"（接受 ≤1 tick 丢唤醒兜底），不再要求用户自写 EA 逻辑
 - **清理 ARM 遗产**：`star_copy` 在 8051/251/SDCC 下改用字节拷贝（32 位拼装是负优化）；注释中 M0+/wfi/SysTick 等 ARM 语境改为 8051/中性描述；事件队列内存口径修正为"随指针宽度而变"
 - `star_timer_stop` 幂等语义写入头文件契约；统一 SDCC 检测宏为 `defined(__SDCC) || defined(SDCC)`
+- **8051 内存模型修复（链接期 DATA 溢出）**：SMALL 模型下内核 DATA 需求约 190B 超 128B，链接报 `L107 ADDRESS SPACE OVERFLOW`；工程模板改用 **Large 模型 + `STAR_RAM_XDATA=1` + 配置 `STARTUP.A51`（`XBPSTACK=1` 启用 reentrant 栈）**，STC89C52 例程加 `AUXR |= 0x02` 使能内部 XRAM；STC89C52RC 因 8KB Flash 需精简配置（关任务层/邮箱）
 
 ### 文档（Docs）
 - 使用教程补齐三处：临界区 API（`star_crit_enter`/`star_crit_exit`）的公开用法与示例、`STAR_MAILBOX_DEF` 须放 .c 文件（放头文件会多 TU 各一份）、`star_init` 不重置丢事件钩子的重启坑

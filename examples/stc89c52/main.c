@@ -21,9 +21,11 @@
 #if defined(__SDCC) || defined(SDCC)
 #include <8051.h>          /* SDCC 自带 8051 头（含 P1_0 等 sbit） */
 #define LED P1_0
+__sfr __at(0x8E) AUXR;     /* STC89 扩展寄存器：8051.h 不带，自行声明 */
 #else
 #include "reg52.h"         /* Keil C51 自带 */
 sbit LED = P1 ^ 0;         /* reg52.h 不提供单个引脚位名 */
+sfr AUXR = 0x8E;           /* STC89 扩展寄存器：reg52.h 不带，自行声明 */
 #endif
 
 #include "star.h"
@@ -41,6 +43,7 @@ enum {
 
 static void timer0_init_1ms(void)
 {
+    AUXR |= 0x02u;   /* EXTRAM=1：使能内部 512B XRAM（内核数据默认放 xdata，必需） */
     TMOD &= 0xF0u;
     TMOD |= 0x01u;   /* Timer0 模式 1（16 位，手动重装） */
     TH0 = T0_RELOAD_H;
@@ -69,6 +72,7 @@ static void blink_handler(uint16_t evt, void *param, void *ctx) STAR_REENTRANT
     STAR_UNUSED_PARAM(param);
     STAR_UNUSED_PARAM(ctx);
     LED = !LED;      /* P1.0 LED 翻转 */
+	
 }
 
 static const star_evt_entry_t evt_table[EVT_COUNT] = {

@@ -109,7 +109,7 @@
         </DllOption>
         <Target51>
           <Target51Misc>
-            <MemoryModel>0</MemoryModel>
+            <MemoryModel>2</MemoryModel>
             <RTOS>0</RTOS>
             <RomSize>0</RomSize>
             <DataHold>0</DataHold>
@@ -233,7 +233,7 @@
             <InterruptVectorAddress>0</InterruptVectorAddress>
             <VariousControls>
               <MiscControls></MiscControls>
-              <Define></Define>
+              <Define>STAR_RAM_XDATA=1</Define>
               <Undefine></Undefine>
               <IncludePath>..\..\stardustos;..\..\stardustos\port\8051;.\</IncludePath>
             </VariousControls>
