@@ -28,6 +28,9 @@
 /* C251 与 C51 一致不支持 inline 关键字：降级为 static */
 #define STAR_INLINE static
 
+/* C251 中断函数语法与 C51 相同 */
+#define STAR_INTERRUPT(n) interrupt n
+
 /* 临界区状态：保存 EA（0/1），用 unsigned char 承载 */
 typedef unsigned char star_crit_state_t;
 

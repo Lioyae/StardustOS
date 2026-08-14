@@ -12,7 +12,7 @@
  *  2. 工程加入内核源文件：stardustos/star.c、star_task.c、star_mail.c、
  *     stardustos/port/star_port.c；include 路径含 stardustos/ 与
  *     stardustos/port/8051/。
- *  3. 内部 RAM 紧张时，用 -DSTAR_RAM_CLASS=xdata 把内核大数组搬到 XRAM
+ *  3. 内部 RAM 紧张时，定义 STAR_RAM_XDATA=1 把内核大数组搬到 XRAM
  *     （STC8H 有 8KB XRAM），腾出内部 RAM 给堆栈。
  *
  * 本示例：24MHz 主频，Timer0 1ms tick，P0.0 每 500ms 翻转。

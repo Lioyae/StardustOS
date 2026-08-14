@@ -8,8 +8,12 @@
 #ifndef STDINT_H
 #define STDINT_H
 
-/* Keil C51/C251 的 INC 目录不含 C99 的 stdint.h/stdbool.h。
- * 内核只用定宽整数与"指针↔整数"，此处提供最小兼容定义。
+#if defined(__SDCC) || defined(SDCC)
+/* SDCC 自带完整 C99 stdint.h：转发到系统头（本文件仅在 Keil 下提供类型） */
+#include_next <stdint.h>
+#else
+/* Keil C51/C251 的 INC 目录不含 C99 的 stdint.h。内核只用定宽整数
+ * 与"指针↔整数"，此处提供最小兼容定义。
  * （host 单元测试用 GCC 自带的 stdint.h，不经过本文件） */
 
 typedef signed char        int8_t;
@@ -23,5 +27,6 @@ typedef unsigned long      uint32_t;
  * 均以 unsigned long 容纳 */
 typedef unsigned long      uintptr_t;
 typedef signed long        intptr_t;
+#endif
 
 #endif

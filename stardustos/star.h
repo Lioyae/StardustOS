@@ -30,11 +30,13 @@ extern "C" {
  * 4. 事件 ID 用连续枚举（从 0 起）；ID 即注册表下标，稀疏会浪费 Flash
  */
 
-/* C51/C251：多参数函数指针须 reentrant（参数走 reentrant 栈）。
- * 非 reentrant 的间接调用参数放不进寄存器（R1-R7 共 7 字节，
- * evt+param+ctx 达 8 字节）会报 C212。host（GCC）下为空。 */
+/* C51/C251/SDCC：多参数函数指针须 reentrant（参数走 reentrant 栈）。
+ * 非 reentrant 的间接调用参数放不进寄存器/固定内存，会报 C212（Keil）
+ * 或 error 92（SDCC）。host（GCC）下为空。 */
 #if defined(__C51__) || defined(__C251__)
 #define STAR_REENTRANT reentrant
+#elif defined(__SDCC) || defined(SDCC)
+#define STAR_REENTRANT __reentrant
 #else
 #define STAR_REENTRANT
 #endif

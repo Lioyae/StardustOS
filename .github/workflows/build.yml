@@ -89,3 +89,24 @@ jobs:
             -Istardustos -Istardustos/port/host -Itests \
             stardustos/star.c stardustos/star_task.c stardustos/star_mail.c \
             stardustos/port/star_port.c tests
+
+  # SDCC 是开源 8051 编译器，可在 Linux CI 验证 8051 移植的编译正确性。
+  # Keil C51/C251 为 Windows 商业软件无法进 CI，由本地按 docs/porting.md 验证。
+  sdcc-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SDCC
+        run: sudo apt-get update && sudo apt-get install -y sdcc
+
+      - name: Compile 8051 kernel (SDCC, mcs51, warnings as errors)
+        run: |
+          mkdir -p build-sdcc
+          for f in star star_task star_mail; do
+            sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+              -o build-sdcc/$f.rel stardustos/$f.c
+          done
+          sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+            -o build-sdcc/star_port.rel stardustos/port/star_port.c
+

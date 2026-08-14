@@ -49,7 +49,7 @@ void star_assert_fail(const char *file, int line)
 /* Timer0 溢出 ISR（interrupt 1）。C51 无弱符号：若用户工程已占用
  * Timer0，定义 STAR_PORT_NO_TICK_ISR 排除本 ISR，并在自己的 ISR 里
  * 调用 star_tick()（二者只能留其一）。 */
-void star_timer0_isr(void) interrupt 1
+void star_timer0_isr(void) STAR_INTERRUPT(1)
 {
     star_tick();
 }
