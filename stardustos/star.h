@@ -80,7 +80,10 @@ typedef enum {
 /* 任务层周期触发时传给 handler 的事件值 */
 #define STAR_EVT_TASK 0xFFFFu
 
-/* star_next_due() 返回值：当前无任何待到期项 */
+/* star_next_due() 返回值：当前无任何待到期项。
+ * 哨兵值取 0xFFFFFFFF，隐含假设：真实到期节拍不会恰好等于该值。
+ * （due = s_tick + ms 且 ms < 2^31，32 位回绕下理论上可能命中；命中时最坏
+ * 仅把该到期项误判为"无到期项"而多睡/早醒一拍，不破坏正确性。） */
 #define STAR_TICK_NONE 0xFFFFFFFFu
 
 /* 注册表项 / 值参转换宏 */

@@ -165,8 +165,13 @@ void main(void)
 #define STAR_TASK_SLOT_MAX  4    /* 同时活跃任务上限 */
 #define STAR_ENABLE_MAILBOX 1    /* 邮箱开关 */
 #define STAR_TIMER_CATCHUP_MAX 1000  /* 周期定时器追赶上限 */
+/* STAR_ASSERT 默认开启：违反内核不变量时回调 star_assert_fail（默认停机死循环） */
 ```
 
+> `STAR_ASSERT` 默认开启，生产环境要彻底关闭（省 Flash/周期）可在工程里定义
+> `-DSTAR_ASSERT(x)=((void)0)`；内核的运行时参数校验（ms/policy 越界等）不依赖断言，
+> 关闭后仍生效。
+>
 > `STAR_TICKLESS` / `STAR_PORT_HCLK_HZ` 无 8051/251 实现，STC 上勿开启；8051/251 的空闲为默认空转（见上方「模块-低功耗」）。
 
 ## 构建与测试
