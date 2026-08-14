@@ -22,3 +22,10 @@ build*/
 *.map
 *.cdb
 *.omf
+
+# Keil µVision 工程产物（本地 GUI 状态与输出，不入库）
+Objects/
+Listings/
+*.uvoptx
+*.uvguix.*
+*.build_log.htm
