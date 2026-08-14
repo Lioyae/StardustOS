@@ -110,3 +110,10 @@ jobs:
           sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
             -o build-sdcc/star_port.rel stardustos/port/star_port.c
 
+      # STC89C52 例程用 SDCC 自带 8051.h，可在 CI 编译验证；
+      # STC8H/STC32G 例程需 STC-ISP 头文件，由本地 Keil 验证
+      - name: Compile STC89C52 example (SDCC)
+        run: |
+          sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+            -o build-sdcc/stc89c52_main.rel examples/stc89c52/main.c
+
