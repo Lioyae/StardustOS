@@ -373,6 +373,10 @@ STAR_MAILBOX_DEF(uart_mb,      /* 柜子名字，随便起（宏会帮你生成�
 > 1..item_size：超长或为 0 返回 `STAR_ERR_PARAM`（**直接拒绝，不静默截断**）。
 > `star_mail_recv` 返回**实际存入的字节数**（1..item_size），空柜返回 -1——不会
 > 回吐整格残留垃圾。每格额外花 1 字节 RAM 记录实际长度（变长消息支持）。
+>
+> **放在哪（重要）**：`STAR_MAILBOX_DEF` 展开成 `static` 变量，**只能写在 `.c` 文件里**，
+> 千万别塞头文件——头文件被多个 `.c` 包含时，每个编译单元会各自造一个同名但互不相通的
+> 柜子，放货和取货对不上号。
 
 ### 4.1 经典用法：中断放货，handler 取货（STC 串口）
 ```c
@@ -681,6 +685,22 @@ static void step1(uint16_t evt, void *param, void *ctx) STAR_REENTRANT
 口诀：**开门（中断）时只许递纸条、放快递；闹钟、打卡机、取货，都回到传达室再干。**
 补一句：`star_loop()` 是"大爷全自动上班"；想保留自己的 `while(1)` 主循环，可改用 `star_poll()` 单步驱动内核，没事干时喊 `star_sleep()` 打盹——详见《移植教程》。
 
+**共享变量到底怎么加临界区？** 内核的临界区开关 `star_crit_enter()` / `star_crit_exit()`
+是**公开可用**的（`STAR_INLINE` 定义在 `stardustos/port/*/star_port.h`，保存/恢复式中断
+开关，8051 下就是 EA）。中断和主循环都要碰的共享变量，这样护住：
+
+```c
+volatile unsigned char shared;
+
+star_crit_state_t cs = star_crit_enter();  /* 关中断，记下原来的开关状态 */
+shared = ...;                              /* 临界区里读写共享变量，务必极短 */
+star_crit_exit(cs);                        /* 恢复"进来时"的中断状态，不是无条件开 */
+```
+
+要点：`star_crit_state_t` 是中断状态的类型（8051 下是 `unsigned char`）；`star_crit_exit`
+恢复的是**进来时**的状态（所以可嵌套，也不会破坏调用方已关中断的状态）；临界区只放
+几条赋值，别在里面调任何耗时或可能阻塞的函数（那会让中断延迟爆炸，见附录 A）。
+
 ### 铁律 4：事件 ID 从 0 连续枚举
 ID 就是值班表的下标，表按"最大 ID+1"占 Flash。ID 写成 200 号，前面 200 格就白占
 了——就像 200 个座位的礼堂只坐最后一排，前面全空着浪费。编号从 0 连续排，座位
@@ -704,6 +724,7 @@ ID 就是值班表的下标，表按"最大 ID+1"占 Flash。ID 写成 200 号�
 | 中断里改全局变量偶发抽风 | 中断和 handler 抢数据 | 数据只走纸条/柜子传，共享变量加临界区 |
 | 省不了电 | `star_idle` 没生效 | 见 6.2：默认就是空转不休眠；要省电需定义 `STAR_PORT_IDLE` 启用 IDL，并先上板实测唤醒行为 |
 | 系统周期性卡一下 | 某个 handler 太慢 | 用 `star_ticks()` 在 handler 头尾打点计时 |
+| 重启内核后还在回调旧钩子 | `star_init` 不重置丢事件钩子 | `star_init` 只初始化队列/时基/定时器，**不重置** `star_set_drop_hook` 注册的钩子（有意为之，供测试注入）。要彻底重启：先 `star_set_drop_hook(NULL)` 清掉旧钩子，再 `star_init` |
 
 **看时间**：`star_ticks()` 返回系统节拍数（单位 `STAR_TICK_MS`），就是内核心里的
 "现在几点"。**在 PC 上先测逻辑**：内核可在电脑上跑（`cmake --build build && ctest`），

@@ -9,6 +9,7 @@
 ### 变更（Changed）
 - **项目更名 MoteOS → StardustOS**：源码目录 `moteos/` → `stardustos/`，标识符前缀 `mote_`/`MOTE_` → `star_`/`STAR_`，文件名 `mote.*` → `star.*`，品牌图标重绘为"星尘"（金色四角星 + 星尘颗粒）
 - **定位聚焦 STC 单片机**：README、移植教程、使用教程、测试文档全面重写为 STC 语境
+- **定位明确为"事件驱动调度框架"**：README 简介改为"协作式内核（事件队列 + 软定时器 + 邮箱 + 可选任务层，非抢占式 RTOS）"，弱化"OS"一词的误导
 
 ### 新增（Added）
 - **8051 移植层**（`stardustos/port/8051/`）：同时支持 Keil C51 与 SDCC，覆盖 STC8H/8A、STC89C52、STC8051U/8052U；临界区用 EA（IE 0xA8 bit7）保存/恢复，tick 用 Timer0 溢出中断（interrupt 1），空闲用 PCON IDL 空闲模式
@@ -28,6 +29,12 @@
 - 多参数函数指针 **reentrant 化**：修复 Keil C51 报 C212、SDCC 报 error 92（参数放不进寄存器）
 - `star_mail_send`/`star_mail_recv` 参数 `data` 改名（`data` 是 C51 存储类关键字）
 - 内核大数组内存模型：8051 下默认放 `idata`（避免 128B `data` 溢出），可 `STAR_RAM_XDATA=1` 搬 XRAM
+- **8051/251 低功耗死机隐患**：`star_idle` 默认空转（原实现把 ARM wfi 的"关中断 + pending 唤醒"语义硬搬到 8051，可能上电睡死）；定义 `STAR_PORT_IDLE` 启用 PCON IDL 时，由实现自行"进 IDL 前临时开中断、唤醒后重新关中断"（接受 ≤1 tick 丢唤醒兜底），不再要求用户自写 EA 逻辑
+- **清理 ARM 遗产**：`star_copy` 在 8051/251/SDCC 下改用字节拷贝（32 位拼装是负优化）；注释中 M0+/wfi/SysTick 等 ARM 语境改为 8051/中性描述；事件队列内存口径修正为"随指针宽度而变"
+- `star_timer_stop` 幂等语义写入头文件契约；统一 SDCC 检测宏为 `defined(__SDCC) || defined(SDCC)`
+
+### 文档（Docs）
+- 使用教程补齐三处：临界区 API（`star_crit_enter`/`star_crit_exit`）的公开用法与示例、`STAR_MAILBOX_DEF` 须放 .c 文件（放头文件会多 TU 各一份）、`star_init` 不重置丢事件钩子的重启坑
 
 ---
 
