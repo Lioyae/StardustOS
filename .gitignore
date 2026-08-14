@@ -1,8 +1,24 @@
+# 构建产物
 build*/
 *.elf
 *.o
 *.exe
 
-# 文档站构建产物：依赖与站点输出不入库（构建方式见 stardustos_docs/package.json）
-stardustos_docs/node_modules/
-stardustos_docs/site/
+# Keil C51/C251 编译产物
+*.OBJ
+*.LST
+*.M51
+*.M66
+
+# SDCC 编译产物
+*.rel
+*.asm
+*.sym
+*.rst
+*.adb
+*.lst
+*.lnk
+*.mem
+*.map
+*.cdb
+*.omf

@@ -2,7 +2,7 @@
 
 > 本文汇总 StardustOS 的全部验证手段、**实测结果明细**与结论。
 > 测试代码在 `tests/`，CI 定义在 `.github/workflows/build.yml`。
-> 所有数字均来自 2026-08-13 的实际运行，非估计值。
+> 所有数字均来自仓库当前代码的本地实测（MinGW GCC 16.1 / CMake），非估计值。
 
 ---
 
@@ -11,16 +11,13 @@
 | # | 层 | 手段 | 验证什么 | CI job |
 |---|---|---|---|---|
 | 1 | 逻辑 | 宿主机单元测试 | 事件队列/定时器/任务/邮箱的 API 语义 | host-tests |
-| 2 | 并发 | 交错测试（多种子） | 对"建模并发语义"的一致性（见局限声明） | host-tests / sanitizers |
-| 3 | 防御 | 断言开启构建 | `STAR_ASSERT` 路径被真实编译并运行 | host-tests（ctest 内置） |
-| 4 | 边界 | 最坏配置构建（队列 255 等） | 极端配置下的正确性 | host-tests + cross-compile |
-| 5 | 内存 | ASan/UBSan | 内存错误、未定义行为 | sanitizers |
-| 6 | 真实启动 | QEMU 冒烟（Cortex-M3，固定拍 + tickless 双档） | 启动/向量表/SysTick/tick→定时器→事件流；tickless：入账追平/nap 重装/固定拍恢复/漂移检测（时间膨胀执行） | qemu-smoke |
-| 7 | 可编译性 | 交叉编译 + 体积断言 | M0+/M3/RV32 可编译、内核三件套 + 移植层分账体积不失控 | cross-compile |
-| 8 | 集成 | 真实 SDK 例程编译 | CMSIS/WCH SDK 真实头文件下例程可编译（例程已启用 tickless） | cross-compile |
-| 9 | 可编译性 | tickless 交叉编译（`STAR_TICKLESS=1`） | 三种架构的 SysTick 重装/追平代码可编译 | cross-compile |
-| 10 | 覆盖 | gcovr 行覆盖 ≥85% 门槛 | 测试没有大面积盲区 | coverage |
-| 11 | 静态 | cppcheck | warning/performance/portability | cppcheck |
+| 2 | 防御 | 断言开启构建 | `STAR_ASSERT` 路径被真实编译并运行 | host-tests（ctest 内置） |
+| 3 | 边界 | 最坏配置构建（队列 255/延时 16/任务槽 16） | 极端配置下的正确性 | host-tests |
+| 4 | 并发 | 交错测试（多种子，含 ASan/UBSan） | 对"建模并发语义"的一致性 + 内存安全（见局限声明） | host-tests / sanitizers |
+| 5 | 可编译性 | SDCC 编译验证（8051，`--Werror`） | 8051 移植（内核 + STC89C52 例程）可编译 | sdcc-compile |
+| 6 | 可编译性 | Keil C51/C251 本地编译 | 8051/80251 移植 0 警告 0 错误（C251 仅无害 C174） | 本地（商业软件，不进 CI） |
+| 7 | 覆盖 | gcovr 行覆盖 ≥85% 门槛 | 测试没有大面积盲区 | coverage |
+| 8 | 静态 | cppcheck（host 配置） | warning/performance/portability | cppcheck |
 
 ---
 
@@ -29,17 +26,47 @@
 ### 1. 宿主机单元测试（`tests/test_*.c`）
 
 内核是纯逻辑，全部在 PC 上跑（`stardustos/port/host` 用共享变量模拟中断开关，
-临界区是否破坏调用方中断状态可在宿主机直接断言）。
+临界区是否破坏调用方中断状态可在宿主机直接断言）。CMake 定义三个目标，
+均带 `-Wall -Wextra -Werror` 与 `STAR_TEST_INJECT_ENABLE=1`（见第 4 节）：
+
+- `test_stardustos`：常规配置（默认：队列 16 / 延时槽 4 / 任务槽 4）
+- `test_stardustos_assert`：断言开启构建（见第 2 节）
+- `test_stardustos_max`：最坏配置构建（见第 3 节）
 
 | 套件 | 覆盖点 |
 |---|---|
-| `suite_queue` | post/派发、满队报错、replace 覆盖、越界 ID 安全丢弃、空 handler、丢弃计数、drop hook（含重入）、临界区嵌套 |
-| `suite_timer` | 单次/周期、handler 内自停、restart、tick 回绕、延时投递（含 replace/cancel）、满队三策略（RETRY/DROP/LATEST）、**相位稳定无漂移**、**ms 边界运行时校验**、**policy 越界运行时校验**、**排序链表触发顺序/重排**、**`star_next_due` deadline 计算**、**`star_sleep` 睡眠判定（宿主机 idle 观测）** |
-| `suite_task` | 周期触发、停止、槽池（随配置伸缩）、ctx 透传、**相位无漂移**、**period_ms 边界校验** |
-| `suite_mail` | 收发往返、满箱、空箱、超长拒绝、**满队整体失败不滞留**（先入队后入箱，全有或全无）、**钩子重入同一邮箱**、**非法构造（slots==0/空指针/item_size 越界）运行时拒绝**、**槽长度域写坏（0 / >item_size）运行时拒绝** |
-| `suite_interleave` | 见下节 |
+| `suite_queue` | post/派发、满队报错、replace 覆盖、满队 replace、越界 ID 安全丢弃、空 handler 丢弃、丢弃计数、drop hook（含重入）、临界区嵌套 |
+| `suite_timer` | 单次/周期、handler 内自停、restart（含重排）、tick 回绕、延时投递（含 replace/cancel）、满队三策略（RETRY/DROP/LATEST）、相位稳定无漂移、ms 边界运行时校验、policy 越界运行时校验、排序链表触发顺序、`star_next_due` deadline 计算、`star_sleep` 睡眠判定（宿主机 idle 观测） |
+| `suite_task` | 周期触发、停止、槽池（随配置伸缩）、ctx 透传、相位无漂移、period_ms 边界校验 |
+| `suite_mail` | 收发往返、满箱、空箱、变长收发、超长拒绝、满队整体失败不滞留（先入队后入箱，全有或全无）、钩子重入同一邮箱、非法构造运行时拒绝、槽长度域写坏运行时拒绝 |
+| `suite_interleave` | 见第 4 节 |
 
-### 2. 交错测试（`tests/test_interleave.c`）
+**内存消毒（ASan/UBSan，CI：`sanitizers`）**：用
+`-fsanitize=address,undefined -fno-omit-frame-pointer` 构建同一套测试并全跑
+（含 5 个种子交错），捕获越界访问、使用未初始化内存、有符号溢出等未定义
+行为。本地 MinGW 工具链不带 libasan/libubsan 运行时，仅由 CI（Ubuntu）执行。
+
+### 2. 断言开启构建（`test_stardustos_assert`）
+
+`star_config.h` 里 `STAR_ASSERT` 默认开启——回调弱符号 `star_assert_fail`
+（`star_port.c` 的宿主机实现为 abort，8051/251 实现为停机死循环）。该目标用
+`-include tests/star_assert.h` 强制在 `star_config.h` **之前**生效，
+把 `STAR_ASSERT` 替换为"打印文件行号 + abort"版本，让失败现场一眼可读：
+
+- 内核所有断言路径被真实编译进测试二进制并运行
+- 测试全程触发任何断言 → 立即失败（CTest 报红）
+
+### 3. 最坏配置构建（`test_stardustos_max`）
+
+```
+STAR_EVT_QUEUE_SIZE = 255   （replace 全扫描的最长路径、大队列回绕）
+STAR_DELAYED_MAX    = 16
+STAR_TASK_SLOT_MAX  = 16
+```
+
+跑全套单元测试 + 交错测试（多种子），验证极端配置下编译与并发语义正确性。
+
+### 4. 交错测试（`tests/test_interleave.c`）
 
 **设计**：单线程内用伪随机序列交错执行"主循环操作"与"伪中断操作"。
 伪中断遵守建模硬件规则——临界区内不执行；同时模拟 tick 中断
@@ -65,91 +92,75 @@
 每步之后临界区不泄漏（star_crit_active() == 0）
 ```
 
-**种子**：默认固定种子；环境变量 `STAR_TEST_SEED` 可换轨迹。
+**种子**：默认固定种子（0x12345678）；环境变量 `STAR_TEST_SEED` 可换轨迹。
+CI 分别以 1..20（常规）、1..10（最坏配置）、1..5（sanitizers）多随机种子跑。
 
 **局限声明（重要）**：交错测试验证的是内核对**测试自行定义的建模语义**
 （"临界区内 ISR 不执行"是测试假设的硬件行为）的一致性。它能证明
 "内核符合我假设的模型"，证明不了"内核符合真实硬件"——后者需要板级验证。
 
-### 3. 断言开启构建（`test_stardustos_assert`）
+### 5. SDCC 编译验证（CI：`sdcc-compile`）
 
-`star_config.h` 里 `STAR_ASSERT` 默认开启——回调弱符号 `star_assert_fail`
-（`star_port.c` 的宿主机实现为 abort，芯片实现为停机死循环）。该目标用
-`-include tests/star_assert.h` 强制在 `star_config.h` **之前**生效，
-把 `STAR_ASSERT` 替换为"打印文件行号 + abort"版本，让失败现场一眼可读：
+SDCC 是开源 8051 编译器，可在 Linux CI 上验证 8051 移植的编译正确性。
+编译内核四个源文件 + STC89C52 例程，全部 `--Werror`（警告即失败）：
 
-- 内核所有断言路径被真实编译进测试二进制并运行
-- 测试全程触发任何断言 → 立即失败（CTest 报红）
+```bash
+# 内核 4 文件（star.c / star_task.c / star_mail.c / port/star_port.c）
+sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+  -o build-sdcc/star.rel stardustos/star.c
+# ... 其余三个文件同法，输出 star_task.rel / star_mail.rel / star_port.rel
 
-### 4. 最坏配置构建（`test_stardustos_max`）
-
-```
-STAR_EVT_QUEUE_SIZE = 255   （replace 全扫描的最长路径）
-STAR_DELAYED_MAX    = 16
-STAR_TASK_SLOT_MAX  = 16
+# STC89C52 例程（SDCC 自带 <8051.h>，CI 可直接编译）
+sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+  -o build-sdcc/stc89c52_main.rel examples/stc89c52/main.c
 ```
 
-跑全套单元测试 + 交错测试（多种子）。同时交叉编译 job 增加
-`-DSTAR_EVT_QUEUE_SIZE=255` 的 M0+/RV32 构建，验证极端配置仍能编译。
+- 只编译到 `.rel` 目标文件，不链接——验证的是"8051 移植可编译"，不是"可运行"
+- STC8H / STC32G 例程需要 STC-ISP 生成的器件头文件，CI 无法获取，
+  由本地 Keil 编译验证（见下节）
 
-### 5. QEMU 冒烟测试（`tests/qemu/cm3/`）
+### 6. Keil C51/C251 本地编译（Windows 商业软件，不进 CI）
 
-比交叉编译多一层：真的把内核**链接成固件并跑起来**。
+Keil C51（8051）/ C251（80251）是 Windows 商业软件，无法进入 Linux CI，
+由本地命令行编译验证（对应 `docs/porting.md` 的移植检查项）：
 
-- 机器：`stm32vldiscovery`（STM32F100，Cortex-M3，与 `port/cm3` 对应）
-- 最小启动代码：`startup.c`（向量表含 SysTick 项）+ `link.ld`，无器件库依赖
-- 固定拍档（`main.c`）：验证链 Reset 进 main → SysTick 向量接到弱符号
-  `SysTick_Handler` → `star_tick` → 500ms 周期定时器到期 → 事件投递 →
-  handler 派发
-- **tickless 档（`main_tickless.c`，`-DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=24000u`）**：
-  覆盖固定拍不编译的整个 tickless 空闲分支——
-  1000ms 周期定时器，`star_sleep`→`star_idle` 的时基追平
-  （COUNTFLAG 读清零、重装值差额、周期余数）、nap 钳制与唤醒后 ISR
-  恢复固定拍。**漂移检测**：第 3 拍落在 tick [3000, 4000]——下界 3000
-  抓"入账跑快"（双重入账/重复计整拍会让定时器提前触发）；上界 4000
-  是给 QEMU 模型行为留的余量（SysTick ptimer 在 wrap 后"计数器 0 等待
-  重载"的状态会被单个 TCG 批拉长，批执行期间事件不处理、真实时间不
-  入账，滞后随宿主负载波动，实测数十 ms 量级——属仿真模型行为，非
-  内核缺陷；真实芯片按 3000±20 校核即可）；另断言 `star_dropped_count()==0`
-  - **时间膨胀**：QEMU 的 WFI 模型在"重装 SysTick 后立即 wfi"时产生
-    伪唤醒（ptimer 重载事件唤醒被 halt 的 vCPU），深睡退化为微秒级
-    轮询；按真实 24MHz 换算，3000 拍需执行约 720 亿条宿主指令，CI
-    时限内跑不完。故把换算常量 HCLK 设为 24kHz——1 个 tick-ms = 24 个
-    计数器周期，入账数学与换算率无关，全部路径照常执行且漂移检测
-    精度不受影响（计数器周期精确）。代价：深睡（wfi 长保持）与 wrap
-    标志路径在 QEMU 下无法验证，仍需板级实测
-  - 本档曾实抓出旧入账协议的真实 bug（回读计数器做锚点 → 0 窗口竞态
-    → 无符号下溢 → 时基一次跳变约 179 秒），详情见 CHANGELOG
-- 判定：semihosting 打印 `QEMU_PASS` / `QEMU_FAIL`，随后 SYS_EXIT；
-  向量表/SysTick 断掉则死循环 → CI `timeout 60s` 判失败
+```bat
+rem 内核 4 文件（C51；C251 同理换 C251.EXE）
+C51.EXE star.c      INCDIR("D:\...\stardustos","D:\...\stardustos\port\8051") OBJECT(build\star.obj)
+C51.EXE star_task.c INCDIR("D:\...\stardustos","D:\...\stardustos\port\8051") OBJECT(build\star_task.obj)
+C51.EXE star_mail.c INCDIR("D:\...\stardustos","D:\...\stardustos\port\8051") OBJECT(build\star_mail.obj)
+C51.EXE star_port.c INCDIR("D:\...\stardustos","D:\...\stardustos\port\8051") OBJECT(build\star_port.obj)
+rem STC89C52 例程（reg52.h 为 C51 自带；例程要求 -DSTAR_PORT_NO_TICK_ISR）
+C51.EXE main.c INCDIR("D:\...\stardustos","D:\...\stardustos\port\8051","D:\...\examples\stc89c52") OBJECT(build\main.obj)
+```
 
-**实现中踩过的坑（记录在案）**：
+- `INCDIR(...)` 指定包含搜索路径（逗号分隔多个），`OBJECT(...)` 指定输出目标文件
+- 实测结果：**C51 内核 0 警告 0 错误**、C51 编译 STC89C52 例程通过；
+  **C251 内核 0 错误**（仅有无害的 C174——未引用 static 函数的提示）
 
-1. semihosting 内联汇编的入参不能放 r0（会被 syscall 号覆盖）——
-   用 `register ... __asm__("r1")` 钉住寄存器
-2. QEMU 的 semihosting 退出码在各平台透传不一致（本地 Windows 版任何
-   退出码都返回 1，实测 `exit(42)` 也返回 1）——**因此判定不依赖退出码**，
-   只看 stdout 关键字
-
-**非板级验证**：外设时序、临界区实测时长不在此列。
-
-### 6. 覆盖率（gcovr）
+### 7. 覆盖率（gcovr）
 
 `--coverage -O0` 构建三个测试目标全跑后统计；CI 以 `--fail-under-line 85`
-守护，覆盖回归直接判红。
+守护，覆盖回归直接判红。gcovr 8.x 对多目标合并更严格（断言构建的
+`-include` 会平移行号），CI 命令已加 `--merge-mode-functions=separate` 避免误判。
 
-### 7. 静态分析（cppcheck）
+### 8. 静态分析（cppcheck）
 
 ```
 cppcheck --enable=warning,performance,portability --std=c99 \
-         --inline-suppr --error-exitcode=1 -Istardustos -Istardustos/port/host -Itests stardustos
+         --inline-suppr --error-exitcode=1 \
+         -Istardustos -Istardustos/port/host -Itests \
+         stardustos/star.c stardustos/star_task.c stardustos/star_mail.c \
+         stardustos/port/star_port.c tests
 ```
 
-任何 error 即失败。
+任何 error 即失败。**只做 host 配置**：8051/251 port 头含 `sfr`/`sbit` 等
+Keil 扩展，cppcheck 无法解析，故通过 `-Istardustos/port/host` 让内核按
+host 配置展开后分析。
 
 ---
 
-## 二、测试结果明细（2026-08-13 实测）
+## 二、测试结果明细（本地实测）
 
 ### 2.1 宿主机单元测试
 
@@ -163,8 +174,8 @@ cppcheck --enable=warning,performance,portability --std=c99 \
 
 | 构建 | 种子范围 | 结果 |
 |---|---|---|
-| 常规 | 1~20 | 20/20 通过 |
-| 最坏配置 | 1~10 | 10/10 通过 |
+| 常规（本地 MinGW） | 1~20 | 20/20 通过 |
+| 最坏配置（本地 MinGW） | 1~10 | 10/10 通过 |
 | CI 常规 job | 1~20 | 通过（自动化） |
 | CI 最坏配置 job | 1~10 | 通过（自动化） |
 | CI ASan job | 1~5 | 通过（自动化，Ubuntu） |
@@ -176,78 +187,38 @@ cppcheck --enable=warning,performance,portability --std=c99 \
 
 ```
 stardustos/star.c               308 行  288 覆盖   93%   （未覆盖：STAR_DELAYED_MAX=0 分支、
-                                                        tick 回绕保护路径等）
-stardustos/star_mail.c           67 行   64 覆盖   95%   （未覆盖：非对齐拷贝头/结构写坏分支）
+                                                        tick 回绕保护路径、任务层关闭分支等）
+stardustos/star_mail.c           64 行   61 覆盖   95%   （未覆盖：非对齐拷贝头/结构写坏分支）
 stardustos/star_task.c           41 行   39 覆盖   95%
 stardustos/port/host/star_port.h  9 行    9 覆盖  100%
-stardustos/port/star_port.c       6 行    4 覆盖   66%   ← 仅宿主分支参与 gcovr；目标机分支
-                                                      （SysTick/tickless/wfi）由交叉编译
-                                                      + QEMU 冒烟覆盖（tickless 档实际
-                                                      执行 tickless 空闲路径）
-TOTAL                       431 行  404 覆盖   93.7%
+stardustos/port/star_port.c       6 行    4 覆盖   66%   ← 仅宿主分支参与 gcovr；8051/251 分支
+                                                        （Timer0 ISR / PCON IDL 空闲）由
+                                                        SDCC/Keil 编译验证，运行时行为待板级实测
+TOTAL                       428 行  401 覆盖   93.7%
 ```
 
 ```
-lines:     93.7% (404/431)   ← CI 门槛 85%
+lines:     93.7% (401/428)   ← CI 门槛 85%
 functions: 95.6% (43/45)
-branches:  84.2% (224/266)
+branches:  84.1% (222/264)
 ```
-
-> gcovr 8.x 对多目标合并更严格（断言构建的 -include 会平移行号），
-> CI 命令已加 `--merge-mode-functions=separate` 避免误判。
 
 ### 2.4 静态分析（cppcheck）
 
 ```
-Checking stardustos/star.c ... （含 STAR_DELAYED_MAX=1 等配置变体）
-Checking stardustos/star_mail.c ...
-Checking stardustos/star_task.c ...
-Checking stardustos/port/star_port.c ...
-Checking stardustos/port/star_port_template.c ...
-5/5 files checked 100% done
+10/10 files checked 100% done
 0 告警，exit=0
 ```
 
-### 2.5 QEMU 冒烟（Cortex-M3，stm32vldiscovery）
+### 2.5 交叉编译验证
 
-```
-固定拍：   QEMU_PASS
-tickless： QEMU_PASS
-```
+- SDCC（`-mmcs51 -c --Werror`）：内核 4 文件 + STC89C52 例程全部编译通过
+  （CI `sdcc-compile` job）
+- Keil C51：内核 4 文件 + STC89C52 例程 0 警告 0 错误（本地）
+- Keil C251：内核 4 文件 0 错误，仅无害 C174（未引用 static 函数）（本地）
 
-判定通过：Reset 正常进入 main；SysTick 中断向量正确命中弱符号
-`SysTick_Handler`；tick 驱动 500ms 周期定时器到期 2 次；事件投递与
-handler 派发链路完整。tickless 档另验证（时间膨胀，1 tick-ms = 24
-计数器周期）：1000ms 周期定时器经分段 nap 3 拍后 ticks 落在
-[3000, 4000]（下界抓入账跑快，上界为 QEMU ptimer 重载滞后的仿真
-余量；无漏记/重复入账类漂移），丢事件计数为 0。整个过程 semihosting
-无异常。
-
-### 2.6 交叉编译与体积（arm-none-eabi-gcc，`-Wall -Wextra -Werror`）
-
-| 目标 | 配置 | text | data+bss | 断言 |
-|---|---|---|---|---|
-| Cortex-M0+ | 默认，`-Os` | 内核三件套 2297 B + port.o 14 B | 280 B | CI：内核 text <2560、port text <512、RAM <512 ✅ |
-| Cortex-M0+ | 队列 255 / 延时 16，`-Os` | 仅记录 | 2384 B | 仅编译（最坏配置体积仅记录） |
-| Cortex-M3 | 默认，无 `-Os` | 仅记录 | 280 B | 仅编译 ✅ |
-| RV32IMC（青稞） | 默认，`-Os` | 内核 text <2816（本机无 RV32 工具链，数字以 CI 为准） | 280 B | CI：内核 text <2816、port text <512、RAM <512 ✅ |
-| Cortex-M0+/M3/RV32 | `STAR_TICKLESS=1`（port.o 增量） | +320~360 B（仅 port 层） | +12 B | 编译 + QEMU tickless 冒烟（M3） ✅ |
-
-> 体积断言为**分账口径**：内核三件套（star.o/star_task.o/star_mail.o）
-> 与移植层 star_port.o（SysTick/临界区/idle）分别设限，移植层不再游离
-> 在断言之外。M0+ 数字为本机实测（评审整改后三件套 2297 B，含 RETRY
-> raw 入队等新增路径；**体积随工具链版本小幅浮动——gcc 14.3.1 实测
-> 2343 B，仍在 CI 阈值 <2560 内，以你的 map 文件与 CI 断言为准**）。
-> 队列 255 配置的 RAM 2.3KB 是用户把队列开到
-> 极限的代价——内核本身不失控，但 `star_event_post_replace` 的临界区
-> 时长也随队列长度线性增长（见 usage.md 附录 A 延迟预算）。
-> tickless 的体积增量只在 `star_port.o`，不占内核三件套的预算。
-
-### 2.7 集成编译（CI）
-
-- STM32F103 例程 + CMSIS_5 / cmsis-device-f1 真实头文件（钉提交）✅
-- CH32V003 例程 + WCH 官方 SDK 真实头文件（钉提交）✅
-- 以上两步均带 `-DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=...`（例程已启用 tickless）
+> 以上全部是**编译验证**：8051/251 移植能通过各自编译器编译，但未链接、
+> 未上板运行——运行时正确性不在验证范围内。
 
 ---
 
@@ -262,51 +233,53 @@ handler 派发链路完整。tickless 档另验证（时间膨胀，1 tick-ms = 
 | ms/period/policy 边界运行时校验生效 | test_ms_bound / test_task_ms_bound / test_policy_invalid | 强 |
 | deadline 计算与睡眠判定（next_due/sleep） | test_next_due / test_sleep_deadline | 强（逻辑层面） |
 | 并发账目一致性（投递=派发+丢弃，邮箱无滞留，临界区不泄漏） | 交错测试多种子全绿 | 强（**对建模语义**） |
-| 断言路径真实可编译、常规路径不触发断言 | test_stardustos_assert 全绿 | 中（无负向触发用例，见局限 5） |
+| 断言路径真实可编译、常规路径不触发断言 | test_stardustos_assert 全绿 | 中（无负向触发用例，见局限 6） |
 | 内存安全/无 UB | ASan/UBSan（CI，Ubuntu） | 中（CI 环境，非板级） |
-| 启动链正确（向量表/SysTick/tick→定时器→事件流） | QEMU 冒烟（Cortex-M3，固定拍） | 中（模拟器，非真硅片） |
-| tickless 空闲路径（长拍重装/时基追平/无漂移） | QEMU tickless 冒烟（Cortex-M3） | 中（模拟器，非真硅片） |
-| 三内核可编译、体积分账受控（三件套+移植层） | 交叉编译 + 分账体积断言（含 tickless 档） | 强 |
+| 8051 移植可编译 | SDCC `--Werror` 内核 + STC89C52 例程 | 强（编译层面） |
+| 8051/80251 移植可编译且无警告 | Keil C51/C251 本地编译 | 强（编译层面） |
 | 覆盖无大面积盲区 | 行覆盖 93.7%（门槛 85%） | 中 |
 | 无静态分析告警 | cppcheck 0 告警 | 中 |
 
-> 注意：板级工程构建已实际抓到过 CI 漏掉的 bug（ch32v 临界区恢复的
-> 汇编操作数编号错误，见 CHANGELOG v0.5.0）——交叉编译/模拟器绿 ≠
-> 真机正确，本表"强"仅指逻辑层。
-
 ### 3.2 不能下的结论（诚实边界）
 
-1. **中断延迟数字**：usage.md 附录 A 的微秒级估算**没有任何实测数据背书**，
-   必须按板级检查清单用 DWT/示波器实测
-2. **低功耗行为**：WFI 在关中断下到底睡不睡、pending 能否唤醒——
-   尤其青稞 INTSYSCR 与 WFI 的交互——未经任何真实芯片验证
-3. **真实硬件时序**：临界区时长、tick 抖动、相位漂移的**实际值**，
-   宿主机测试与 QEMU 都测不出来
-4. **M0+/RV32 的启动链**：QEMU 冒烟只覆盖 Cortex-M3 一条链
-5. **断言负向路径**：没做过"故意触发断言"的测试（需进程级用例）
+1. **未板级验证**：内核尚未在任何真实芯片上运行过；中断时序、临界区
+   实测时长、周期定时器相位漂移的实际值，宿主机测试全部测不出来
+2. **8051 空闲唤醒未实测**：`star_idle` 的 PCON IDL 空闲依赖 tick 中断
+   （ET0=1）唤醒——IDL 唤醒后是否按预期恢复、唤醒延迟多长，均需上板
+   实测；未使能 tick 中断唤醒时可用 `STAR_PORT_IDLE_NOOP` 兜底空转
+3. **编译验证 ≠ 运行验证**：SDCC/Keil 只证明移植代码可编译，未链接成
+   固件、未上板；8051/251 的运行时行为（Timer0 ISR、空闲模式）无任何
+   实测数据
+4. **建模并发语义**：交错测试的伪中断规则由测试自行定义，证明不了
+   "内核符合真实硬件"
+5. **C251 的 C174**：未引用 static 函数提示为无害警告（0 错误），但
+   说明 251 移植仍有可清理项
+6. **断言负向路径**：没做过"故意触发断言"的测试（需进程级用例）
 
 ### 3.3 总体结论
 
 - **内核逻辑是可信的**：API 语义、并发一致性（建模语义下）、边界校验、
-  内存安全（CI）、启动链（M3 模拟器）、可编译性、体积、覆盖率，均有
-  自动化证据支撑——对一个 v0.x 开发预览项目，这已经是相当厚的验证层
-- **硬件行为是未知的**：中断延迟、低功耗、实板相位抖动等所有"真实世界"
-  数字全部悬空。**任何生产决策都不应基于未经板级验证的行为**
-- 定位与 README「项目状态」一致：值得作为**学习项目与内核逻辑参考**使用；
-  "生产就绪"不成立，上板前必须按 `docs/porting.md` 第 7 章检查清单完成验证
+  内存安全（CI）、可编译性（GCC/SDCC/Keil C51/C251）、覆盖率、静态
+  分析，均有自动化或本地实测证据支撑——对一个 v0.x 开发预览项目，
+  这已经是相当厚的验证层
+- **硬件行为是未知的**：8051/251 的 Timer0 tick、PCON IDL 空闲唤醒、
+  临界区真实时长等所有"真实世界"数字全部悬空。**任何生产决策都不应
+  基于未经板级验证的行为**
+- 定位与 README「项目状态」一致：值得作为**学习项目与内核逻辑参考**
+  使用；"生产就绪"不成立，上板前必须按 `docs/porting.md` 的移植检查
+  清单完成验证
 
 ---
 
-## 四、CI 工作流（`.github/workflows/build.yml`）
+## 四、CI 工作流（`.github/workflows/build.yml`，共 5 个 job）
 
 | job | 内容 |
 |---|---|
-| host-tests | `-Werror` 构建 + ctest 三目标 + 20/10 种子交错 |
+| host-tests | `-Werror` 构建 + ctest 三目标（常规/断言/最坏配置）+ 20/10 种子交错 |
 | sanitizers | ASan/UBSan 构建 + ctest + 5 种子 |
-| cross-compile | M0+(-Os+分账体积断言)/M3/RV32(-Os+分账体积断言) + 最坏配置构建 + tickless 档（三架构 `STAR_TICKLESS=1`）+ STM32F103/CH32V003 真实 SDK 例程编译（钉 SDK 提交，带 tickless 宏） |
-| qemu-smoke | 固定拍 + tickless 双档冒烟（见第一节第 5 条） |
-| coverage | gcovr，行覆盖 <85% 判红 |
-| cppcheck | error 即失败 |
+| coverage | gcovr，行覆盖 <85% 判红（`--merge-mode-functions=separate`） |
+| cppcheck | host 配置静态分析，error 即失败 |
+| sdcc-compile | SDCC `-mmcs51 -c --Werror` 编译内核 4 文件 + STC89C52 例程 |
 
 ---
 
@@ -319,29 +292,31 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 
 # 交错测试多种子
-STAR_TEST_SEED=1 ./build/test_stardustos          # Linux/macOS
+STAR_TEST_SEED=1 ./build/test_stardustos           # Linux/macOS
 $env:STAR_TEST_SEED=1; ./build/test_stardustos.exe # PowerShell
 
 # 覆盖率
-cmake -S . -B build-cov -DCMAKE_C_FLAGS="-Werror --coverage -O0"
+cmake -S . -B build-cov -G "MinGW Makefiles" -DCMAKE_C_FLAGS="-Werror --coverage -O0"
 cmake --build build-cov && ctest --test-dir build-cov
-gcovr --root . --exclude tests --exclude 'build.*' --print-summary
+gcovr --root . --exclude tests --exclude 'build.*' \
+  --merge-mode-functions=separate --print-summary
 
-# QEMU 冒烟（需 arm-none-eabi-gcc 与 qemu-system-arm）
-arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -Os -mcpu=cortex-m3 -mthumb \
-  -ffreestanding -nostdlib -T tests/qemu/cm3/link.ld -o qemu.elf \
-  tests/qemu/cm3/main.c tests/qemu/cm3/startup.c \
-  stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
-  -Istardustos -Istardustos/port/cm3
-qemu-system-arm -M stm32vldiscovery -cpu cortex-m3 -nographic -monitor none \
-  -semihosting-config enable=on,target=native -kernel qemu.elf
-# 期望输出 QEMU_PASS
+# SDCC 编译验证（需 sdcc，apt install sdcc）
+mkdir -p build-sdcc
+sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+  -o build-sdcc/star.rel stardustos/star.c
+sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+  -o build-sdcc/star_port.rel stardustos/port/star_port.c
+sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+  -o build-sdcc/stc89c52_main.rel examples/stc89c52/main.c
+# （star_task.c / star_mail.c 同法）
 
-# QEMU tickless 冒烟（加 -DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=24000u，
-# 用 main_tickless.c；期望输出 QEMU_PASS。24000 是时间膨胀值，见第一节
-# 第 5 条；真实主频下 CI 时限内跑不完）
+# Keil C51/C251 本地编译（Windows，见第一节第 6 条的命令行用法）
 
 # 静态分析
 cppcheck --enable=warning,performance,portability --std=c99 \
-  --inline-suppr --error-exitcode=1 -Istardustos -Istardustos/port/host -Itests stardustos
+  --inline-suppr --error-exitcode=1 \
+  -Istardustos -Istardustos/port/host -Itests \
+  stardustos/star.c stardustos/star_task.c stardustos/star_mail.c \
+  stardustos/port/star_port.c tests
 ```

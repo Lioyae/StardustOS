@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="README.md">简体中文</a> | English
+</p>
+
 <p align="center">
   <img src="brand/stardustos-icon.svg" alt="StardustOS Logo" width="160">
 </p>
@@ -5,8 +9,8 @@
 <h1 align="center">StardustOS</h1>
 
 <p align="center">
-  <strong>An event-driven cooperative kernel for tiny MCUs</strong><br>
-  No standalone assembly files (inline asm for critical sections/sleep) · No dynamic memory allocation · Resource usage fixed at compile time
+  <strong>An event-driven cooperative kernel for small MCUs</strong><br>
+  No standalone assembly files · Zero dynamic memory allocation · All resource usage fixed at compile time
 </p>
 
 <p align="center">
@@ -19,9 +23,6 @@
   <a href="https://github.com/Lioyae/StardustOS">
     <img src="https://img.shields.io/badge/language-C99-2b6cb0?style=for-the-badge" alt="C99">
   </a>
-  <a href="https://stardustos.zane-leo.top/">
-    <img src="https://img.shields.io/badge/Docs-中文文档站-dd6b20?style=for-the-badge" alt="StardustOS Docs (Chinese)">
-  </a>
   <a href="https://github.com/Lioyae/StardustOS/stargazers">
     <img src="https://img.shields.io/github/stars/Lioyae/StardustOS?style=for-the-badge&color=d69e2e" alt="Stars">
   </a>
@@ -30,19 +31,15 @@
   </a>
 </p>
 
-<p align="right">
-  <a href="README.md">简体中文</a> | English
-</p>
-
 ---
 
 ## About
 
-StardustOS is a C99 event-driven cooperative kernel for small MCUs (2KB RAM / 16KB Flash class).
+StardustOS is a C99 event-driven cooperative kernel for small MCUs (2KB RAM / 16KB Flash class), focused on STC 8051 / 80251 microcontrollers.
 
-- No assembly source files in the kernel (port layer uses inline assembly; vendor startup files/vector tables are still required), no dynamic memory allocation, no blocking delay APIs
-- All RAM/Flash usage is fixed at compile time; CI cross-compiles and asserts kernel size
-- Supports 8051 (STC8H/8A, STC89C52, STC8051U/8052U, Keil C51 / SDCC), 80251 (STC32G, Keil C251), and host (x86); interrupt latency = tick interrupt + kernel critical sections (event enqueue O(1); mailbox copy proportional to item_size; post_replace proportional to queue length). Critical-section duration depends on configuration and clock, and **must be measured per platform** (estimation formulas and measurement methods in the [usage guide appendix A](docs/usage.md))
+- No assembly source files in the kernel (the port layer accesses SFR/registers directly), no dynamic memory allocation, no blocking delay APIs
+- All RAM/Flash usage is fixed at compile time; CI automates unit tests, coverage, and SDCC compile checks
+- Supports 8051 (STC8H/8A, STC89C52, STC8051U/8052U, Keil C51 / SDCC), 80251 (STC32G, Keil C251), and host (x86); interrupt latency = tick interrupt + kernel critical sections (event enqueue O(1); mailbox copy proportional to item_size; post_replace proportional to queue length). Critical-section duration depends on configuration and clock, and **must be measured per platform** (see the usage guide appendix A)
 
 ## Project Status (Important)
 
@@ -50,7 +47,7 @@ StardustOS is a C99 event-driven cooperative kernel for small MCUs (2KB RAM / 16
 
 - ✅ Verified: host unit/interleave tests (ASan/UBSan, multi-seed), assert-enabled build, worst-case config build (queue 255), **gcov coverage gate (≥85% lines)**, **cppcheck static analysis** — all automated by CI; **8051 (Keil C51 / SDCC) and 80251 (Keil C251) kernel compile cleanly with 0 warnings/0 errors** (C251 emits harmless C174 for unreferenced static functions)
 - ❌ Not verified: the kernel has never run on real silicon. Interrupt timing, measured critical-section duration, 8051/251 idle-mode (PCON IDL) wakeup, and periodic-timer phase drift have no board-level measurements
-- ⚠️ Before production use, complete the board-level verification per the [porting checklist](docs/porting.md). The v1.0.x "production ready" tags have been retracted (see [CHANGELOG](CHANGELOG.md))
+- ⚠️ Before production use, complete the board-level verification per the [porting checklist](docs/porting.md).
 
 ## Supported Platforms
 
@@ -60,7 +57,7 @@ StardustOS is a C99 event-driven cooperative kernel for small MCUs (2KB RAM / 16
 | 80251 | Keil C251 | STC32G |
 | x86 (host) | GCC | Runs kernel unit tests on PC |
 
-> Except for the host, all platforms above are **verified by cross-compilation only; never run on hardware**.
+> Except for the host, 8051/251 are verified by compilation only (SDCC in CI, Keil locally); **never run on hardware**.
 
 ## Resource Usage
 
@@ -68,62 +65,93 @@ StardustOS is a C99 event-driven cooperative kernel for small MCUs (2KB RAM / 16
 |---|---|
 | Kernel RAM (default) | ~280B (event queue 16 slots + delayed 4 + task slots 4), compile-time fixed; on 8051 large arrays default to `idata`, define `STAR_RAM_XDATA=1` to move them to XRAM |
 | Kernel Flash | Pure logic, compile-time fixed; on 8051/251 check linked size (Keil builds are not part of Linux CI) |
-| Full blink example | See `examples/stc8h` / `stc89c52` / `stc32g` (requires STC-ISP generated device headers) |
+| Full blink example | See `examples/stc8h` / `stc89c52` / `stc32g` (STC8H/STC32G need STC-ISP generated device headers) |
 
 ## Modules
 
 | Module | Description |
 |---|---|
 | Event queue | `star_event_post` / `star_event_post_replace` (latest wins per ID) / `star_event_post_delayed` (with `_replace` and `star_event_cancel_delayed`); drop counter `star_dropped_count()` |
-| Dispatch table | C99 designated initializers; event ID is the index; O(1) dispatch; table lives in Flash |
-| Timers | Statically defined; 32-bit wraparound safe; list sorted by due time so expiry scanning only visits due nodes (idle poll is O(1)); periodic timers fire on absolute phase (missed ticks coalesce, no cumulative drift); selectable full-queue policy: retry / drop (strict deadline) / latest (replace semantics) — note: **periodic timers drop the beat on a full queue and proceed next beat; one-shot RETRY timers retry on the next tick until delivered (retries do not count as drops or fire the drop hook)** |
-| Task layer | Periodic-callback convenience layer: descriptors in Flash (handler + ctx + period), state slot pool in RAM; inactive tasks consume no RAM (optional). Note: **not RTOS tasks** — no preemption, handlers are called synchronously by the main loop, unrelated to the event queue |
-| Mailbox | Static slots with deep copy; slot insert and event enqueue are atomic within one critical section (all-or-nothing, no race window); variable-length items (1..item_size bytes per slot with item_size≤255, `recv` returns the actual stored length, oversize sends are rejected — never truncated, +1 byte length overhead per slot); invalid constructions (slots==0, NULL buffers, etc.) are rejected at runtime (optional) |
-| Low power | Deadline-aware: `star_next_due()` exposes the next expiry; the kernel sleeps (into `star_idle(next_due)`) only when the queue is empty and nothing is due; optional **tickless** idle (`STAR_TICKLESS=1`) reloads SysTick to the next deadline before wfi and restores the fixed rate on wake. Race handling is correct by reasoning, but **WFI behavior on each chip (especially QingKe) is not board-verified** |
-| Critical section | Save/restore style (PRIMASK / INTSYSCR), nesting-safe |
+| Registry | Sequential initializers, event ID is the index, O(1) dispatch, table lives in Flash (C51 has no designated initializers — fill `STAR_ENTRY` in order) |
+| Timer | Statically defined; 32-bit wraparound-safe; list sorted by due time, expiry scan visits only due nodes (poll idle is O(1)); periodic timers fire on absolute phase (missed ticks coalesce, no cumulative drift); full-queue policies: retry / drop (strict deadline) / latest (replace semantics) |
+| Task layer | Periodic-callback convenience layer: descriptors in Flash (handler + ctx + period), slot pool in RAM, inactive tasks use no RAM (optional). Not RTOS tasks — no preemption, handlers are called synchronously by the main loop |
+| Mailbox | Static-slot deep copy, **enqueue-before-copy** atomic with event enqueue in one critical section; variable-length messages (1..item_size bytes per slot, item_size≤255, `recv` returns actual length, over-length rejected not truncated); invalid construction rejected at runtime (optional) |
+| Low power | Deadline-aware: `star_next_due()` exposes the next expiry; the kernel sleeps (into `star_idle(next_due)`) only when the queue is empty and nothing is due; 8051/251 use PCON IDL idle mode (CPU stops, timers/interrupts keep running, any interrupt wakes). tickless (`STAR_TICKLESS=1`) is host/reference only, not supported on 8051/251 |
+| Critical section | Save/restore style (EA on 8051/251), nesting-safe |
 | Observability | `star_dropped_count()` unified drop counter + `star_set_drop_hook()` drop callback (event/mailbox APIs only inside the hook) |
 
 ## Quick Start
 
+STC89C52 (Keil C51), P1.0 LED toggling every 500ms:
+
 ```c
+#include "reg52.h"
 #include "star.h"
 
-enum { EVT_BLINK = 0 };
+sbit LED = P1 ^ 0;
+
+enum { EVT_BLINK = 0, EVT_COUNT };
+
+/* 12MHz, 12T, Timer0 mode 1 (16-bit manual reload), 1ms tick */
+#define T0_RELOAD_H 0xFCu
+#define T0_RELOAD_L 0x18u
+
+static void timer0_init_1ms(void)
+{
+    TMOD &= 0xF0u;
+    TMOD |= 0x01u;   /* Timer0 mode 1 */
+    TH0 = T0_RELOAD_H;
+    TL0 = T0_RELOAD_L;
+    ET0 = 1;         /* Timer0 interrupt enable */
+    TR0 = 1;         /* start Timer0 */
+    EA = 1;          /* enable global interrupts */
+}
+
+/* Mode 1 needs manual reload: custom Timer0 ISR; define STAR_PORT_NO_TICK_ISR */
+void timer0_isr(void) interrupt 1
+{
+    TH0 = T0_RELOAD_H;
+    TL0 = T0_RELOAD_L;
+    star_tick();
+}
 
 static star_timer_t blink_timer;
 
-static void blink_handler(uint16_t evt, void *param, void *ctx)
+static void blink_handler(uint16_t evt, void *param, void *ctx) STAR_REENTRANT
 {
-    led_toggle();
+    STAR_UNUSED_PARAM(evt);
+    STAR_UNUSED_PARAM(param);
+    STAR_UNUSED_PARAM(ctx);
+    LED = !LED;
 }
 
-static const star_evt_entry_t evt_table[] = {
-    [EVT_BLINK] = STAR_ENTRY(blink_handler, NULL),
+static const star_evt_entry_t evt_table[EVT_COUNT] = {
+    STAR_ENTRY(blink_handler, NULL),   /* sequential: EVT_BLINK = 0 */
 };
 
-int main(void)
+void main(void)
 {
-    systick_start(1);  /* 1ms tick, call star_tick() in the ISR */
-    star_init(evt_table, sizeof(evt_table) / sizeof(evt_table[0]));
+    timer0_init_1ms();
+    star_init(evt_table, EVT_COUNT);
     star_timer_start(&blink_timer, EVT_BLINK, NULL, 500, true);
-
-    star_loop();  /* Never returns */
+    star_loop();   /* never returns */
 }
 ```
 
+> On C51, handlers must be marked `STAR_REENTRANT` (multi-parameter function pointers use the reentrant stack); the event table uses sequential initializers (C51 has no C99 designated initializers). Full examples in `examples/stc8h`, `examples/stc89c52`, `examples/stc32g`.
+
 ## Documentation
 
-- 🌐 [Online documentation site (Chinese)](https://stardustos.zane-leo.top/): usage, porting, and asking guides
-- [Porting guide](docs/porting.md) (Chinese): Keil / MounRiver integration, SysTick conflicts, non-CMSIS chips, checklist
-- [Usage guide](docs/usage.md) (Chinese): glossary, line-by-line walkthrough of events / timers / mailboxes / tasks, full example project
-- [Test documentation](docs/test.md) (Chinese): test matrix, interleave test design, QEMU smoke, coverage & static analysis, local run instructions
+- [Porting guide](docs/porting.md) (Chinese): Keil C51/C251 integration, Timer0 tick wiring, EA critical section, custom tick ISR, STC-ISP headers, checklist
+- [Usage guide](docs/usage.md) (Chinese): glossary, event / timer / mailbox / task layer walkthrough, full project
+- [Test documentation](docs/test.md) (Chinese): test matrix, interleave test design, coverage & static analysis, SDCC/Keil compile checks, local run instructions
 
-## Rules
+## Usage Rules
 
-1. Handlers must be non-blocking and return within milliseconds; split long flows into state machines (the kernel provides no blocking delay)
-2. Event params must point to global/static storage, or hold ≤32-bit values via `STAR_P()/STAR_U32()`; use mailboxes for large data
+1. Handlers must be non-blocking and return within milliseconds; split long flows into state machines (no blocking delay APIs)
+2. Event params must point to global/static storage, or hold ≤32-bit values via `STAR_P()/STAR_U32()`; use mailboxes for large data (**on 8051 the generic pointer is 3 bytes: ≤16-bit values round-trip losslessly, 32-bit values truncate**)
 3. Timer/task APIs are main-loop-context only; `star_event_post*` and `star_mail_send` may be called from ISRs
-4. Event IDs are a contiguous enum starting from 0 (the ID is the dispatch table index)
+4. Event IDs are consecutive from 0 (ID is the registry index)
 
 ## Configuration
 
@@ -136,15 +164,12 @@ All tunables live in `stardustos/star_config.h`:
 #define STAR_ENABLE_TASK    1    /* task layer switch */
 #define STAR_TASK_SLOT_MAX  4    /* max simultaneously active tasks */
 #define STAR_ENABLE_MAILBOX 1    /* mailbox switch */
-#define STAR_TICKLESS       1    /* tickless idle (requires the next line) */
-#define STAR_PORT_HCLK_HZ   48000000u  /* core clock in Hz, tickless only */
+#define STAR_TIMER_CATCHUP_MAX 1000  /* periodic timer catch-up limit */
 ```
 
-> `STAR_TICKLESS` / `STAR_PORT_HCLK_HZ` must be defined **project-wide**
-> (`star_port.c` compiles against them too), not just in one .c file.
-> Complete the tickless board-verification checklist in the [porting guide](docs/porting.md) before use.
+> `STAR_TICKLESS` / `STAR_PORT_HCLK_HZ` are host/reference only; tickless is not supported on 8051/251.
 
-## Build and Test
+## Build & Test
 
 The kernel is pure logic; unit tests run on PC (`ctest` runs three builds by default: regular config, assert-enabled `test_stardustos_assert`, and worst-case `test_stardustos_max` — queue 255 / delayed 16 / task slots 16):
 
@@ -154,9 +179,21 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-> The interleave tests verify the kernel's consistency against a **modeled concurrency semantics** (no preemption inside critical sections); pseudo-interrupt injection windows cover `star_event_post*` / `star_mail_send` (before critical section) / `star_poll` (before each step) / `star_process_timers` (during list traversal). They do not constitute hardware verification; real hardware timing must be verified on the board (see Project Status above).
+8051 compile verification runs on two tracks (see the [test documentation](docs/test.md)):
 
-## Directory Structure
+```bash
+# SDCC (in CI, --Werror)
+sdcc -mmcs51 -c --Werror -Istardustos -Istardustos/port/8051 \
+  -o star.rel stardustos/star.c
+
+# Keil C51 / C251 (local; Windows commercial software, not in Linux CI)
+C51.EXE star.c INCDIR(stardustos;stardustos\port\8051) OBJECT(star.OBJ) SMALL
+C251.EXE star.c INCDIR(stardustos;stardustos\port\251) OBJECT(star.OBJ)
+```
+
+> The interleave tests verify the kernel's consistency against a **modeled concurrency semantics** (no preemption inside critical sections); pseudo-interrupt injection windows cover `star_event_post*` / `star_mail_send` (before critical section) / `star_poll` (before each step) / `star_process_timers` (during list traversal). This is not hardware verification; real timing must be verified on the board.
+
+## Directory Layout
 
 ```
 stardustos/
@@ -164,13 +201,13 @@ stardustos/
 ├── star_config.h            # single configuration point
 ├── star_task.c              # task layer (optional)
 ├── star_mail.c              # mailbox (optional)
-└── port/                    # porting layer (per core: ch32v / cm0plus / cm3 / host)
-examples/                    # per-chip examples
+└── port/                    # port layer (per core: 8051 / 251 / host)
+examples/                    # STC examples (stc8h / stc89c52 / stc32g)
 tests/                       # PC unit tests
-docs/                        # porting and usage guides
+docs/                        # porting & usage guides
 brand/                       # brand assets
 ```
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+Apache License 2.0, see [LICENSE](LICENSE).
