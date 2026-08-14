@@ -76,7 +76,7 @@ StardustOS 是面向小容量单片机的 C 语言事件驱动协作式内核，
 | 定时器 | 静态定义；32 位回绕安全；链表按到期时刻排序，到期扫描只遍历到期节点（poll 空转 O(1)）；周期定时器按绝对相位触发（错过拍合并追赶，无累积漂移）；满队策略可选：重试 / 丢弃（严格截止）/ 最新（replace 语义） |
 | 任务层 | 周期回调便捷层：描述符在 Flash（handler + ctx + 周期），状态槽池在 RAM，未启动的任务不占 RAM（可选编译）。不是 RTOS 任务——不抢占、handler 被主循环直接同步调用 |
 | 邮箱 | 静态槽深拷贝，**先入队后入箱**、与事件入队同一临界区原子完成；变长消息（每槽 1..item_size 字节且 item_size≤255，`recv` 返回实际存入长度，超长拒绝不截断）；非法构造运行时拒绝（可选编译） |
-| 低功耗 | deadline 感知：`star_next_due()` 暴露最近到期时刻，空闲时队列空且无到期项才进 `star_idle(next_due)`；8051/251 用 PCON IDL 空闲模式（CPU 停、定时器/中断继续，任意中断唤醒）。tickless（`STAR_TICKLESS=1`）仅宿主机/参考实现，8051/251 暂不支持 |
+| 低功耗 | deadline 感知：`star_next_due()` 暴露最近到期时刻，空闲时队列空且无到期项才进 `star_idle(next_due)`；8051/251 默认空转（安全），定义 `STAR_PORT_IDLE` 可启用 PCON IDL 空闲模式（须先上板实测唤醒行为）。tickless（`STAR_TICKLESS=1`）8051/251 无实现，暂不支持 |
 | 临界区 | 保存/恢复式（8051/251 用 EA），支持嵌套 |
 | 可观测性 | `star_dropped_count()` 统一丢事件计数 + `star_set_drop_hook()` 丢事件回调（钩子仅限事件/邮箱 API） |
 
@@ -167,7 +167,7 @@ void main(void)
 #define STAR_TIMER_CATCHUP_MAX 1000  /* 周期定时器追赶上限 */
 ```
 
-> `STAR_TICKLESS` / `STAR_PORT_HCLK_HZ` 仅宿主机/参考实现使用，8051/251 暂不支持 tickless。
+> `STAR_TICKLESS` / `STAR_PORT_HCLK_HZ` 无 8051/251 实现，STC 上勿开启；8051/251 的空闲为默认空转（见上方「模块-低功耗」）。
 
 ## 构建与测试
 

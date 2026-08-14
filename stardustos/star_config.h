@@ -12,7 +12,8 @@
 #define STAR_TICK_MS 1
 #endif
 
-/* 事件队列槽数（每槽 8 字节 RAM） */
+/* 事件队列槽数（每槽大小随指针宽度而变：8051 通用指针 3 字节、host 8 字节；
+ * 具体占用以链接后 map 文件为准） */
 #ifndef STAR_EVT_QUEUE_SIZE
 #define STAR_EVT_QUEUE_SIZE 16
 #endif
@@ -37,9 +38,10 @@
 #define STAR_ENABLE_MAILBOX 1
 #endif
 
-/* tickless 空闲：空闲时按下一 deadline 重装 SysTick 再睡（真实低功耗，
- * 而非固定拍唤醒）。需要 STAR_PORT_HCLK_HZ（内核主频 Hz，ms→周期换算），
- * 参见 docs/porting.md 的 tickless 小节与板级验证清单。0 = 固定拍（默认） */
+/* tickless 空闲：空闲时按下一 deadline 重装 tick 定时器再睡（真实低功耗，
+ * 而非固定拍唤醒）。需要 STAR_PORT_HCLK_HZ（内核主频 Hz，ms→周期换算）。
+ * 注意：当前 8051/251 移植仅支持固定拍，本项在 STC 上必须保持 0；
+ * 8051/251 上开启 tickless 无实现支持，勿使用。 */
 #ifndef STAR_TICKLESS
 #define STAR_TICKLESS 0
 #endif

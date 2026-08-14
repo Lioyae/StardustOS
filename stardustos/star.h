@@ -116,15 +116,13 @@ bool star_poll(void);
 void star_loop(void);
 
 /* 由移植层提供：进低功耗。入参为内核已知的下一到期节拍（见 star_next_due），
- * STAR_TICK_NONE 表示无待到期项（可长睡到任意中断）。
- * 契约：内核在关中断状态下调用本函数（临界区内）。
- * 固定拍实现应仅为一条 wfi；tickless 实现为编译期常量乘加、
- * 寄存器写与 wfi（无运行时 64 位除法，见 port/star_port.c），
- * 均应在数十周期量级。pending 中断会唤醒 CPU，唤醒后内核先恢复中断。
- * tickless 移植（STAR_TICKLESS=1）应：先追平提前唤醒已流逝的时基、
- * 再按 next_due 重装 SysTick、最后 wfi——参考 port/star_port.c 的
- * 参考实现。深度睡眠（STOP/STANDBY 等会停掉 tick 时钟的模式）不支持，
- * 需自行处理唤醒竞态与唤醒源 */
+ * STAR_TICK_NONE 表示无待到期项。
+ * 契约：内核在关中断状态下调用本函数（临界区内）。该契约源自 ARM/RISC-V 的
+ * wfi 语义（pending 中断即可唤醒）；8051/251 的空闲模式（PCON IDL）唤醒条件
+ * 与 EA 的关系因厂商而异、且未经板级验证，故 8051/251 移植默认把本函数实现
+ * 为空转（见 port/star_port.c），启用真实低功耗前须上板验证唤醒行为。
+ * 实现要求：极短（数十周期量级），不在此函数内开中断；会停掉 tick 时钟的
+ * 深度睡眠（STOP/STANDBY/掉电等）不支持，需自行处理唤醒源与唤醒竞态。 */
 void star_idle(uint32_t next_due);
 
 star_status_t star_event_post(uint16_t evt, void *param);
@@ -142,12 +140,12 @@ star_status_t star_event_post_delayed_replace(uint16_t evt, void *param,
 star_status_t star_event_cancel_delayed(uint16_t evt, void *param);
 
 /* 由移植层的中断服务程序调用，周期 = STAR_TICK_MS。
- * 契约：只允许单一 tick 中断源调用（默认 SysTick）。
+ * 契约：只允许单一 tick 中断源调用（8051/251 为 Timer0 溢出中断）。
  * 内核对时基 s_tick 的一切读写都在临界区内完成（本函数自带临界区），
  * 与主循环/其它中断上下文并发均安全 */
 void star_tick(void);
 
-/* 可变步长时基推进（供 tickless 移植层在 SysTick 覆盖多拍时调用，
+/* 可变步长时基推进（供 tickless 移植层在 tick 定时器覆盖多拍时调用，
  * 语义 = 连续 advance(ms) 次 star_tick）。自带临界区，任意上下文安全。
  * 单次推进不建议超过 2^30（回绕比较数学留裕量） */
 void star_tick_advance(uint32_t ms);
@@ -180,6 +178,9 @@ star_status_t star_timer_start(star_timer_t *t, uint16_t evt, void *param,
 star_status_t star_timer_start_ex(star_timer_t *t, uint16_t evt, void *param,
                                   uint32_t ms, bool periodic,
                                   star_timer_policy_t policy);
+/* 停止定时器：从链表摘除并释放。幂等——未启动（不在链表中）的定时器
+ * 同样返回 STAR_OK（语义是"确保停止"；与 restart 的"必须已在运行、
+ * 否则 STAR_ERR_NOT_FOUND"不同，勿混淆）。传 NULL 返回 STAR_ERR_PARAM。 */
 star_status_t star_timer_stop(star_timer_t *t);
 /* 重新计时：更新 due 并按新到期时刻重排链表；周期定时器同步更新周期。
  * 未启动（不在链表中）返回 STAR_ERR_NOT_FOUND */

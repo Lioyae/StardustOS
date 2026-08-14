@@ -38,12 +38,12 @@ void star_assert_fail(const char *file, int line)
  * 定时器初始化（TMOD/AUXR/TH0/TL0/TR0 等）由应用在 main() 里完成——
  * 不同芯片配置各异：STC8/STC32 有 1T 模式与 AUXR 分频，STC89 为 12T。
  *
- * 空闲：PCON IDL（空闲模式：CPU 停、定时器与中断继续，任意中断唤醒）。
- * 契约要求 tick 中断已使能（ET0=1）方能唤醒，否则请勿启用空闲（见
- * STAR_PORT_IDLE_NOOP）。
+ * 空闲：默认空转不休眠（绝对安全，主循环退化为轮询）。定义 STAR_PORT_IDLE
+ * 才启用 PCON IDL 空闲模式——但 8051 空闲唤醒条件在不同变体间存在分歧
+ * （"已使能中断"是否含 EA 各厂家不一，且 STC 未经板级验证），启用前须
+ * 上板实测（见 star_idle 内注释与 docs/porting.md）。
  *
- * tickless（STAR_TICKLESS=1）暂不支持 8051/251：第一版仅固定拍。
- * 需要时按 docs/porting.md 的 tickless 协议、结合具体定时器型号扩展。 */
+ * tickless（STAR_TICKLESS=1）暂不支持 8051/251：第一版仅固定拍。 */
 
 #ifndef STAR_PORT_NO_TICK_ISR
 /* Timer0 溢出 ISR（interrupt 1）。C51 无弱符号：若用户工程已占用
@@ -58,13 +58,22 @@ void star_timer0_isr(void) STAR_INTERRUPT(1)
 void star_idle(uint32_t next_due)
 {
     STAR_UNUSED_PARAM(next_due); /* 固定拍不使用 deadline */
-#ifdef STAR_PORT_IDLE_NOOP
-    /* 未使能 tick 中断唤醒，或需绝对安全时：空转不休眠 */
-#else
-    /* IDL=1 进入空闲（下一条指令后 CPU 停）；中断唤醒后清 IDL，
-     * 下次 star_idle 才能再次进入空闲 */
-    STAR_PCON = STAR_PCON | 0x01u;
-    STAR_PCON = STAR_PCON & 0xFEu;
+    /* 8051 空闲模式（PCON IDL）的唤醒条件存在厂商分歧：标准 8051 是
+     * "已使能中断源置位"（ET0=1 且 TF0=1）即可唤醒、EA 不必为 1；但部分
+     * 变体要求 EA=1 才算"已使能中断"。而本函数由内核在关中断（EA=0）下
+     * 调用，若硬件要求 EA=1 才能被中断唤醒，芯片将永远睡死（只能复位）。
+     *
+     * 因此默认实现为"空转不休眠"——主循环退化为轮询，绝对安全，代价是
+     * 失去空闲省电。需要低功耗时定义 STAR_PORT_IDLE 启用 IDL，但必须先：
+     *  1) 确认 tick 中断已使能（ET0=1）；
+     *  2) 上板实测"关中断进 IDL 能否被 tick 中断唤醒"（看空闲电流是否
+     *     下降、tick 是否准时）；
+     *  3) 若无法唤醒，改用"EA=1 进 IDL"的自定义 star_idle，并自行处理
+     *     查空到入睡之间丢事件的窗口（详见 docs/porting.md）。
+     */
+#ifdef STAR_PORT_IDLE
+    STAR_PCON = STAR_PCON | 0x01u;   /* IDL=1：进空闲 */
+    STAR_PCON = STAR_PCON & 0xFEu;   /* 唤醒后清 IDL，下次可再进 */
 #endif
 }
 

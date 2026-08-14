@@ -9,13 +9,21 @@
 
 #if STAR_ENABLE_MAILBOX
 
-/* 内核不依赖 libc：对齐感知的拷贝（32 位字拷贝 + 头尾字节）。
- * M0+/RV32EC 不支持非对齐访存，源地址未对齐时按字节组装字 */
+/* 内核不依赖 libc 的拷贝。
+ * 8 位机（8051/80251）上 32 位拼装是负优化，直接逐字节拷贝；
+ * 32 位机上用对齐感知的字拷贝（32 位字 + 头尾字节，规避严格别名 UB，
+ * 且 M0+/RV32EC 不支持非对齐访存，源地址未对齐时按字节组装字）。 */
 static void star_copy(void *dst, const void *src, uint16_t n)
 {
     uint8_t *d = (uint8_t *)dst;
     const uint8_t *s = (const uint8_t *)src;
 
+#if defined(__C51__) || defined(__C251__) || defined(__SDCC)
+    while (n != 0) {
+        *d++ = *s++;
+        n--;
+    }
+#else
     while (n != 0 && ((uintptr_t)d & 3u) != 0u) {
         *d++ = *s++;
         n--;
@@ -39,6 +47,7 @@ static void star_copy(void *dst, const void *src, uint16_t n)
         *d++ = *s++;
         n--;
     }
+#endif
 }
 
 /* 邮箱字段合法性：手工构造的 star_mail_t 可能出现 slots==0（除零）、

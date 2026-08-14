@@ -76,7 +76,7 @@ StardustOS is a C event-driven cooperative kernel for small MCUs, focused on STC
 | Timer | Statically defined; 32-bit wraparound-safe; list sorted by due time, expiry scan visits only due nodes (poll idle is O(1)); periodic timers fire on absolute phase (missed ticks coalesce, no cumulative drift); full-queue policies: retry / drop (strict deadline) / latest (replace semantics) |
 | Task layer | Periodic-callback convenience layer: descriptors in Flash (handler + ctx + period), slot pool in RAM, inactive tasks use no RAM (optional). Not RTOS tasks — no preemption, handlers are called synchronously by the main loop |
 | Mailbox | Static-slot deep copy, **enqueue-before-copy** atomic with event enqueue in one critical section; variable-length messages (1..item_size bytes per slot, item_size≤255, `recv` returns actual length, over-length rejected not truncated); invalid construction rejected at runtime (optional) |
-| Low power | Deadline-aware: `star_next_due()` exposes the next expiry; the kernel sleeps (into `star_idle(next_due)`) only when the queue is empty and nothing is due; 8051/251 use PCON IDL idle mode (CPU stops, timers/interrupts keep running, any interrupt wakes). tickless (`STAR_TICKLESS=1`) is host/reference only, not supported on 8051/251 |
+| Low power | Deadline-aware: `star_next_due()` exposes the next expiry; the kernel enters `star_idle(next_due)` only when the queue is empty and nothing is due. On 8051/251 `star_idle` spins by default (safe); define `STAR_PORT_IDLE` to enable PCON IDL idle mode after verifying wakeup on hardware. tickless (`STAR_TICKLESS=1`) has no 8051/251 implementation |
 | Critical section | Save/restore style (EA on 8051/251), nesting-safe |
 | Observability | `star_dropped_count()` unified drop counter + `star_set_drop_hook()` drop callback (event/mailbox APIs only inside the hook) |
 
@@ -167,7 +167,7 @@ All tunables live in `stardustos/star_config.h`:
 #define STAR_TIMER_CATCHUP_MAX 1000  /* periodic timer catch-up limit */
 ```
 
-> `STAR_TICKLESS` / `STAR_PORT_HCLK_HZ` are host/reference only; tickless is not supported on 8051/251.
+> `STAR_TICKLESS` / `STAR_PORT_HCLK_HZ` have no 8051/251 implementation; do not enable them on STC. On 8051/251 idle spins by default (see "Modules - Low power").
 
 ## Build & Test
 

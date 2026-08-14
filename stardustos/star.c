@@ -209,7 +209,7 @@ void star_tick(void)
 void star_tick_advance(uint32_t ms)
 {
     /* 统一契约：s_tick 的一切访问都在临界区内完成（含本函数）。
-     * M0+ 上 32 位读改写非原子，依赖"关中断"保证与主循环侧读写互斥 */
+     * 8 位机上 32 位读改写非原子，依赖"关中断"保证与主循环侧读写互斥 */
     star_crit_state_t cs = star_crit_enter();
     s_tick += ms;
     star_crit_exit(cs);
@@ -226,7 +226,7 @@ uint32_t star_ticks(void)
 {
     uint32_t t;
     star_crit_state_t cs = star_crit_enter();
-    t = s_tick; /* M0+ 上 32 位读非原子，关中断保证完整性 */
+    t = s_tick; /* 8 位机上 32 位读非原子，关中断保证完整性 */
     star_crit_exit(cs);
     return t;
 }
@@ -488,7 +488,7 @@ star_status_t star_event_cancel_delayed(uint16_t evt, void *param)
 
 static void star_process_timers(void)
 {
-    uint32_t now = star_ticks(); /* 单一快照：M0+ 上裸读 32 位 s_tick 会撕裂 */
+    uint32_t now = star_ticks(); /* 单一快照：8 位机上裸读 32 位 s_tick 会撕裂 */
     star_timer_t **pp = &s_timers;
 
     /* 链表按 due 升序：头节点未到期则全部未到期，提前终止——
@@ -652,11 +652,12 @@ uint32_t star_next_due(void)
     return best;
 }
 
-/* 临界区内检查并睡眠：消除"查空 → 中断投递 → WFI 漏睡"竞态。
+/* 临界区内检查并睡眠：消除"查空 → 中断投递 → 睡眠漏睡"竞态。
  * deadline 感知：队列空且最近到期项未到（或根本无到期项）才睡，
  * 否则立即返回让主循环处理到期工作；判定与睡眠同临界区原子完成。
- * ARM/RISC-V 的 wfi 在 pending 中断存在时立即唤醒，
- * 唤醒后先恢复中断再返回，事件不会睡过头 */
+ * 注：关中断下睡眠能否被 pending 中断唤醒取决于平台的睡眠指令/模式
+ * （ARM wfi 可以；8051 空闲模式与 EA 的关系因厂商而异），8051/251 移植
+ * 默认把 star_idle 实现为空转，故本路径在 STC 上不会真正睡眠 */
 void star_sleep(void)
 {
     star_crit_state_t cs = star_crit_enter();
