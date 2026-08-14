@@ -21,11 +21,21 @@
 #if defined(__SDCC) || defined(SDCC)
 #include <8051.h>          /* SDCC 自带 8051 头（含 P1_0 等 sbit） */
 #define LED P1_0
-__sfr __at(0x8E) AUXR;     /* STC89 扩展寄存器：8051.h 不带，自行声明 */
 #else
-#include "reg52.h"         /* Keil C51 自带 */
-sbit LED = P1 ^ 0;         /* reg52.h 不提供单个引脚位名 */
-sfr AUXR = 0x8E;           /* STC89 扩展寄存器：reg52.h 不带，自行声明 */
+#include "reg52.h"         /* Keil C51（或 STC-ISP 替换的增强版） */
+sbit LED = P1 ^ 0;         /* 标准 reg52.h 不提供单个引脚位名 */
+#endif
+
+/* STC89 使能内部 XRAM 需要 AUXR（0x8E）。标准 Keil reg52.h / SDCC 8051.h
+ * 都没有这个 STC 扩展寄存器，故在此声明。但若你用 STC-ISP「添加型号到 Keil」
+ * 后 reg52.h 变成增强版（已含 AUXR），再声明会报 C231 'AUXR' redefinition——
+ * 此时在 C51 → Define 加 STAR_HAS_AUXR 跳过本声明即可。 */
+#ifndef STAR_HAS_AUXR
+#if defined(__SDCC) || defined(SDCC)
+__sfr __at(0x8E) AUXR;
+#else
+sfr AUXR = 0x8E;
+#endif
 #endif
 
 #include "star.h"
