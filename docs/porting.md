@@ -1,4 +1,4 @@
-# MoteOS 移植教程（手把手）
+# StardustOS 移植教程（手把手）
 
 > 本文假设读者：会用 IDE 打开工程、会点编译按钮，仅此而已。
 > 不认识的词，第 0 章都翻译成大白话了；每一步都写了"点哪里、看到什么、为什么"。
@@ -6,12 +6,12 @@
 
 ---
 
-## 第 0 章：先花几分钟，认识 MoteOS 需要的三样东西
+## 第 0 章：先花几分钟，认识 StardustOS 需要的三样东西
 
-这一章要干成的事：**用大白话把"移植"这件事讲清楚**——移植就是让 MoteOS 在你的芯片上
+这一章要干成的事：**用大白话把"移植"这件事讲清楚**——移植就是让 StardustOS 在你的芯片上
 "按时打铃、没事打盹、挂请勿打扰牌子"，三件事而已。读完这章，后面每一章都不会有看不懂的词。
 
-MoteOS 是个"事件驱动的协作式内核"。把它想象成工厂的调度室：它不管你的产品具体怎么做，
+StardustOS 是个"事件驱动的协作式内核"。把它想象成工厂的调度室：它不管你的产品具体怎么做，
 只负责维持工厂的节奏——**按时打铃（tick）、没活就打盹（wfi）、干活时挂"请勿打扰"牌子（临界区）**。
 它要在你的芯片上开工，只向你要这三样东西。
 
@@ -27,7 +27,7 @@ MoteOS 是个"事件驱动的协作式内核"。把它想象成工厂的调度�
 | **中断** | 芯片正埋头干活，突然门铃响了：它放下手里的活去开门，处理完门铃的事，再回来接着干 |
 | **ISR（中断处理函数）** | 开门时干的那点活。铁规矩：越快越好，干完马上回去，别让客人久等 |
 | **SysTick** | 芯片自带的"自动报时器"，绝大多数芯片都有。到点就来按一次门铃，循环往复 |
-| **tick（节拍）** | 报时器每 `MOTE_TICK_MS`（默认 1 毫秒）响一次，这一响就是一个节拍，也就是内核的心跳 |
+| **tick（节拍）** | 报时器每 `STAR_TICK_MS`（默认 1 毫秒）响一次，这一响就是一个节拍，也就是内核的心跳 |
 | **wfi** | 让芯片"闭眼打盹"的一条指令。打盹几乎不耗电；门铃一响，芯片自动睁眼 |
 | **临界区** | 干活时挂"请勿打扰"牌子的时间段。牌子挂着，门铃响了也先不接；摘了牌子才接 |
 | **Flash** | 芯片的长期记忆：断电不忘，用来放程序 |
@@ -45,11 +45,11 @@ MoteOS 是个"事件驱动的协作式内核"。把它想象成工厂的调度�
 | **tickless** | 空闲时把报时器拨到"下一件到点的事"再睡，而不是每 1ms 被叫醒一次，更省电 |
 | **事件 / 队列 / handler / 邮箱** | 纸条 / 传达室的筐 / 工人 / 快递柜。这是内核内部的运转方式，细节见《使用教程》 |
 
-### 0.2 MoteOS 到底要哪三样东西
+### 0.2 StardustOS 到底要哪三样东西
 
 | 要的东西 | 大白话是什么 | 谁提供 |
 |---|---|---|
-| **tick**（节拍） | 每 1ms 来一次的"心跳"，由某个硬件定时器中断产生，中断里调用 `mote_tick()` | 芯片的 SysTick（绝大多数芯片都有） |
+| **tick**（节拍） | 每 1ms 来一次的"心跳"，由某个硬件定时器中断产生，中断里调用 `star_tick()` | 芯片的 SysTick（绝大多数芯片都有） |
 | **wfi**（低功耗） | 没事干时让 CPU 睡觉的指令，来中断会自动醒 | ARM/RISC-V 都有 `wfi` 指令 |
 | **临界区** | "关中断/开中断"两个操作，保护共享数据 | 芯片内核头文件里现成的函数 |
 
@@ -66,29 +66,29 @@ MoteOS 是个"事件驱动的协作式内核"。把它想象成工厂的调度�
 
 | 你的芯片 | 用哪个 IDE | 用哪个 port 目录 |
 |---|---|---|
-| CH32V003/V007/V203/V307（WCH RISC-V） | MounRiver Studio | `moteos/port/ch32v/` |
-| CIU32F003（华大电子 M0+） | Keil MDK | `moteos/port/cm0plus/` |
-| CH32M030（WCH M0+） | Keil MDK | `moteos/port/cm0plus/` |
-| STM32F030（M0+） | Keil MDK | `moteos/port/cm0plus/` |
-| STM32F103（M3） | Keil MDK | `moteos/port/cm3/` |
+| CH32V003/V007/V203/V307（WCH RISC-V） | MounRiver Studio | `stardustos/port/ch32v/` |
+| CIU32F003（华大电子 M0+） | Keil MDK | `stardustos/port/cm0plus/` |
+| CH32M030（WCH M0+） | Keil MDK | `stardustos/port/cm0plus/` |
+| STM32F030（M0+） | Keil MDK | `stardustos/port/cm0plus/` |
+| STM32F103（M3） | Keil MDK | `stardustos/port/cm3/` |
 | 其他芯片 | 任意 | 看第 4 章（从模板写） |
 
 > **WCH 两代 SDK 的差别（重要）**：CH32V003/V007 是 V2 代，port 默认包含
 > `ch32v00x.h`，什么都不用配。CH32V203/V307 是 V3 代，用同一个 `ch32v`
 > 目录，但**必须在工程宏定义里加**：
-> `-DMOTE_CH32_HAL_HEADER=<ch32v20x.h>`（V203，中型）或
-> `-DMOTE_CH32_HAL_HEADER=<ch32v30x.h>`（V307，大型）。
+> `-DSTAR_CH32_HAL_HEADER=<ch32v20x.h>`（V203，中型）或
+> `-DSTAR_CH32_HAL_HEADER=<ch32v30x.h>`（V307，大型）。
 > 另外青稞的临界区开关寄存器 INTSYSCR 默认按 CSR `0x800` 处理，不同代次
 > 手册的映射可能有差异：上板前按目标芯片手册核验，不一致就用
-> `-DMOTE_CH32_INTSYSCR=<值>` 覆盖——**这直接决定关中断和 wfi 行为，
+> `-DSTAR_CH32_INTSYSCR=<值>` 覆盖——**这直接决定关中断和 wfi 行为，
 > 是检查清单里的必测项**（见第 7 章）。
 
 ---
 
 ## 第 1 章：路线 A —— Keil MDK + STM32F103（ARM 芯片）
 
-这一章要干成的事：**在 Keil 里从零搭出一个空工程，把 MoteOS 接进去，让灯按 500ms 闪起来**。
-一路只做四件大事：建工程 → 抄启动文件 → 抄 MoteOS 文件 → 接好 SysTick 这根线。
+这一章要干成的事：**在 Keil 里从零搭出一个空工程，把 StardustOS 接进去，让灯按 500ms 闪起来**。
+一路只做四件大事：建工程 → 抄启动文件 → 抄 StardustOS 文件 → 接好 SysTick 这根线。
 STM32F103 是 ARM 家族（Cortex-M3）的芯片，本章所有说法对第 0 章表格里"Keil MDK"一列的
 芯片都通用，只是文件名按芯片型号换一下。
 
@@ -98,7 +98,7 @@ STM32F103 是 ARM 家族（Cortex-M3）的芯片，本章所有说法对第 0 �
 它管着"这个文件夹里哪些文件要翻译、怎么翻译"。
 
 1. 打开 Keil µVision5 → 菜单 `Project → New µVision Project...`
-2. 选一个文件夹（比如 `D:\mote_demo`），工程名填 `blink`，点保存
+2. 选一个文件夹（比如 `D:\star_demo`），工程名填 `blink`，点保存
 3. 弹出芯片选择框：搜索框输入 `STM32F103C8`，选中 → 点 OK
    （这一步是在告诉 Keil：目标芯片是哪一颗，翻译出来的语言要对上它的"方言"）
 4. 弹出 "Manage Run-Time Environment" 窗口 → **直接点 Cancel**（我们用不到 Keil 的软件包）
@@ -112,7 +112,7 @@ STM32F103 是 ARM 家族（Cortex-M3）的芯片，本章所有说法对第 0 �
    - `Libraries\CMSIS\CM3\DeviceSupport\ST\STM32F10x\startup\arm\startup_stm32f10x_md.s`
    - `Libraries\CMSIS\CM3\DeviceSupport\ST\STM32F10x\system_stm32f10x.c`
    - `Libraries\CMSIS\CM3\CoreSupport\core_cm3.c`（可省略，但建议加上）
-2. 把这三个文件复制到 `D:\mote_demo` 里
+2. 把这三个文件复制到 `D:\star_demo` 里
 3. 回到 Keil，在左侧工程树里右键 `Target 1` → `Add Group...`，名字输入 `Startup`
    （Group = 工程树里的一个"抽屉"，用来给文件分类）
 4. 右键刚建的 `Startup` 组 → `Add Existing Files to Group 'Startup'...`，把那三个文件加进来
@@ -120,42 +120,42 @@ STM32F103 是 ARM 家族（Cortex-M3）的芯片，本章所有说法对第 0 �
 > 那个 `.s` 文件里装着"紧急电话簿"（向量表）：它保证"SysTick 报时器响铃时，电话会打到
 > 名叫 `SysTick_Handler` 的函数那里"。这个函数正是第 3 章、第 4 章的主角。
 
-### 1.3 复制 MoteOS 文件
+### 1.3 复制 StardustOS 文件
 
-把 MoteOS 仓库里这些文件复制到 `D:\mote_demo\moteos\`（保持目录结构）：
+把 StardustOS 仓库里这些文件复制到 `D:\star_demo\stardustos\`（保持目录结构）：
 
 ```
-moteos/mote.c                ← 内核，必须
-moteos/mote.h                ← 内核头文件，必须
-moteos/mote_config.h         ← 配置文件，必须
-moteos/mote_task.c           ← 任务层（可选，本例用了）
-moteos/mote_mail.c           ← 邮箱（可选，本例用了）
-moteos/port/mote_port.c      ← 移植实现（SysTick 接管），必须
-moteos/port/cm3/mote_port.h  ← 你的芯片对应 port 头文件，必须
+stardustos/star.c                ← 内核，必须
+stardustos/star.h                ← 内核头文件，必须
+stardustos/star_config.h         ← 配置文件，必须
+stardustos/star_task.c           ← 任务层（可选，本例用了）
+stardustos/star_mail.c           ← 邮箱（可选，本例用了）
+stardustos/port/star_port.c      ← 移植实现（SysTick 接管），必须
+stardustos/port/cm3/star_port.h  ← 你的芯片对应 port 头文件，必须
 ```
 
-> 只复制你需要的。最小系统只需要 `mote.c`、`mote.h`、`mote_config.h`、
-> `mote_port.c` 和对应的 `mote_port.h` 五个文件。
-> 其中 `mote_port.c` 就是"接线工"：它替你把 SysTick 报时器的门铃接到了内核的 `mote_tick()` 上。
+> 只复制你需要的。最小系统只需要 `star.c`、`star.h`、`star_config.h`、
+> `star_port.c` 和对应的 `star_port.h` 五个文件。
+> 其中 `star_port.c` 就是"接线工"：它替你把 SysTick 报时器的门铃接到了内核的 `star_tick()` 上。
 
 回到 Keil，重复第 1.2 步的"建组加文件"操作：
 
-1. 新建组 `MoteOS`
-2. 把 `mote.c`、`mote_task.c`、`mote_mail.c`、`port/mote_port.c` 加进 `MoteOS` 组
+1. 新建组 `StardustOS`
+2. 把 `star.c`、`star_task.c`、`star_mail.c`、`port/star_port.c` 加进 `StardustOS` 组
 
 ### 1.4 添加头文件路径（最常见的报错根源）
 
 头文件 = 说明书的目录。编译器（翻译官）默认只在工程目录里找目录，
-要告诉它 MoteOS 的说明书目录放在哪：
+要告诉它 StardustOS 的说明书目录放在哪：
 
 1. 点工具栏的魔术棒按钮（`Options for Target`，快捷键 `Alt+F7`）
 2. 切到 `C/C++` 标签页
 3. 找到 `Include Paths` 那一栏，点右边的 `...` 按钮
 4. 点文件夹加号，添加这三条路径：
    ```
-   ..\mote_demo\moteos
-   ..\mote_demo\moteos\port\cm3
-   ..\mote_demo\moteos\port
+   ..\star_demo\stardustos
+   ..\star_demo\stardustos\port\cm3
+   ..\star_demo\stardustos\port
    ```
    > 也把你 SDK 的 CMSIS 头文件路径加进来（startup 相关头文件）。
 5. 依次点 OK 关闭
@@ -165,7 +165,7 @@ moteos/port/cm3/mote_port.h  ← 你的芯片对应 port 头文件，必须
 
 ### 1.5 粘贴例程代码
 
-在 Keil 里新建组 `App`，新建文件 `main.c`（`File → New`，另存为 `D:\mote_demo\main.c`），
+在 Keil 里新建组 `App`，新建文件 `main.c`（`File → New`，另存为 `D:\star_demo\main.c`），
 内容直接用 `examples/stm32f103/main.c` 的完整代码（LED 500ms 闪烁 + 串口回环 + 心跳任务）。
 
 （现在先不用看懂每一行——第 5 章会把这份代码拆开逐行讲。此刻它只负责"证明接线成功"。）
@@ -181,16 +181,16 @@ moteos/port/cm3/mote_port.h  ← 你的芯片对应 port 头文件，必须
 
 | 报错信息 | 原因 | 怎么改 |
 |---|---|---|
-| `cannot open source input file "mote.h"` | 头文件路径没加或加错 | 回 1.4 检查三条路径 |
-| `SysTick_Handler multiply defined` | 你的工程里有**两个强符号** SysTick_Handler（MoteOS 的是弱符号，不会引发此报错） | 只保留一个：要么用你自己的并在里面调 `mote_tick()`（见第 3 章），要么删掉自己的交给 MoteOS |
-| `'NULL' undeclared` | 老版本 mote.h 缺 `<stddef.h>` | 更新 MoteOS 到最新（已修复） |
-| `USART1_IRQHandler multiply defined` | 你的代码里也写了串口中断函数 | 二选一：删掉其中一个，或把 `mote_mail_send` 加进你自己的 USART1_IRQHandler 里 |
+| `cannot open source input file "star.h"` | 头文件路径没加或加错 | 回 1.4 检查三条路径 |
+| `SysTick_Handler multiply defined` | 你的工程里有**两个强符号** SysTick_Handler（StardustOS 的是弱符号，不会引发此报错） | 只保留一个：要么用你自己的并在里面调 `star_tick()`（见第 3 章），要么删掉自己的交给 StardustOS |
+| `'NULL' undeclared` | 老版本 star.h 缺 `<stddef.h>` | 更新 StardustOS 到最新（已修复） |
+| `USART1_IRQHandler multiply defined` | 你的代码里也写了串口中断函数 | 二选一：删掉其中一个，或把 `star_mail_send` 加进你自己的 USART1_IRQHandler 里 |
 | `GPIO_CNF_... undeclared` | 你用的库没有 ST 老版寄存器宏 | 用你 SDK 自带的外设库函数写初始化（参考第 5 章） |
 
 > "符号" = 程序里每一个有名字的东西（函数名、变量名）。链接（拼装）时要核对名字，
 > 重名就打架。`multiply defined` = "这个名字出现了两次，我不知道该听谁的"。
 > 而"弱符号/强符号"是解决重名打架的规矩：**弱的是替身，强的是本尊；本尊一出场，替身自动让位**。
-> MoteOS 自带的 `SysTick_Handler` 就是替身，你自己写的才是本尊——所以第 3 章的办法才能成立。
+> StardustOS 自带的 `SysTick_Handler` 就是替身，你自己写的才是本尊——所以第 3 章的办法才能成立。
 
 ### 1.8 下载验证
 
@@ -210,7 +210,7 @@ moteos/port/cm3/mote_port.h  ← 你的芯片对应 port 头文件，必须
 
 这一章要干成的事：**换一家芯片厂、换一个 IDE，把第 1 章的流程再走一遍**。
 CH32V003 是 RISC-V 家族的芯片（WCH 公司出品），IDE 换成 MounRiver Studio（简称 MRS）。
-流程骨架一模一样：建工程 → 抄 MoteOS → 加头文件路径 → 烧录验证，区别只在按钮长什么样。
+流程骨架一模一样：建工程 → 抄 StardustOS → 加头文件路径 → 烧录验证，区别只在按钮长什么样。
 走完这章你就明白：**换芯片并不难，难的是第一颗芯片**。
 
 ### 2.1 新建工程
@@ -220,18 +220,18 @@ CH32V003 是 RISC-V 家族的芯片（WCH 公司出品），IDE 换成 MounRiver
 3. 等它生成完成，确认工程里已经有 `ch32v00x.h`、`core_riscv.h`、`startup` 等 WCH 官方文件
    （这些是 WCH 的 SDK 部分：启动文件和说明书目录，跟第 1 章的 ST 标准库一个角色）
 
-### 2.2 复制 MoteOS 文件
+### 2.2 复制 StardustOS 文件
 
 复制到工程目录（保持结构）：
 
 ```
-moteos/mote.c
-moteos/mote.h
-moteos/mote_config.h
-moteos/mote_task.c          ← 可选
-moteos/mote_mail.c          ← 可选
-moteos/port/mote_port.c
-moteos/port/ch32v/mote_port.h   ← 注意：RISC-V 用 ch32v 目录！
+stardustos/star.c
+stardustos/star.h
+stardustos/star_config.h
+stardustos/star_task.c          ← 可选
+stardustos/star_mail.c          ← 可选
+stardustos/port/star_port.c
+stardustos/port/ch32v/star_port.h   ← 注意：RISC-V 用 ch32v 目录！
 ```
 
 > 和第 1 章唯一的大区别：port 头文件从 `cm3` 目录换成 `ch32v` 目录——
@@ -240,7 +240,7 @@ moteos/port/ch32v/mote_port.h   ← 注意：RISC-V 用 ch32v 目录！
 ### 2.3 添加源文件到工程
 
 1. 在左侧工程树右键工程名 → `Import...` → `General → File System` → Next
-2. From directory 选 `你的工程目录\moteos`，勾选那 4 个 `.c` 文件（含 port/mote_port.c）→ Finish
+2. From directory 选 `你的工程目录\stardustos`，勾选那 4 个 `.c` 文件（含 port/star_port.c）→ Finish
 3. 确认 4 个文件出现在工程树里，**且不是灰色**（灰色 = 未参与编译）
 
 > "参与编译" = 翻译官会翻译这个文件。灰色文件会被翻译官无视，
@@ -252,9 +252,9 @@ moteos/port/ch32v/mote_port.h   ← 注意：RISC-V 用 ch32v 目录！
 2. `C/C++ Build → Settings → GNU RISC-V Cross C Compiler → Includes`
 3. 在 `Include paths (-I)` 里点加号，添加：
    ```
-   ${workspace_loc:/${ProjName}/moteos}
-   ${workspace_loc:/${ProjName}/moteos/port/ch32v}
-   ${workspace_loc:/${ProjName}/moteos/port}
+   ${workspace_loc:/${ProjName}/stardustos}
+   ${workspace_loc:/${ProjName}/stardustos/port/ch32v}
+   ${workspace_loc:/${ProjName}/stardustos/port}
    ```
 4. Apply and Close
 
@@ -263,7 +263,7 @@ moteos/port/ch32v/mote_port.h   ← 注意：RISC-V 用 ch32v 目录！
 用 `examples/ch32v003/main.c` 的内容替换工程里的 main.c。
 
 > **注意编码**：编码 = 文字在电脑里存成什么格式。MRS 新建工程的 main.c 通常是
-> **GBK 编码**（国内老标准）。如果你粘贴进去的 MoteOS 代码带 UTF-8 中文注释
+> **GBK 编码**（国内老标准）。如果你粘贴进去的 StardustOS 代码带 UTF-8 中文注释
 > （国际标准），两种格式混在一起，文字可能乱码或编译告警。两种办法：
 > ① 在 MRS 里对 main.c 右键 → Properties → Resource，把 Text file encoding 改成 UTF-8；
 > ② 保持英文注释。
@@ -279,12 +279,12 @@ moteos/port/ch32v/mote_port.h   ← 注意：RISC-V 用 ch32v 目录！
 
 | 报错信息 | 原因 | 怎么改 |
 |---|---|---|
-| `unknown type name 'IRQn_Type'` | 你的 SDK 版本 core_riscv.h 不能单独包含 | 更新 MoteOS（port/ch32v 已改含 ch32v00x.h） |
-| `implicit declaration of function 'SysTick_Config'` | 该版 SDK 没这个函数 | 更新 MoteOS（port/ch32v 里已内联补上） |
+| `unknown type name 'IRQn_Type'` | 你的 SDK 版本 core_riscv.h 不能单独包含 | 更新 StardustOS（port/ch32v 已改含 ch32v00x.h） |
+| `implicit declaration of function 'SysTick_Config'` | 该版 SDK 没这个函数 | 更新 StardustOS（port/ch32v 里已内联补上） |
 | `'GPIO_CNF_...' undeclared` | 例程用了 ST 风格宏，WCH 没有 | 已改用寄存器字面量，更新例程 |
 | 中文注释乱码 | GBK/UTF-8 混用 | 按 2.5 的编码说明处理 |
 
-> 前两行都来自同一个老问题：WCH 不同版本的 SDK 内容有差异。更新 MoteOS 到最新版
+> 前两行都来自同一个老问题：WCH 不同版本的 SDK 内容有差异。更新 StardustOS 到最新版
 > 就能兼容；这类"跟着 SDK 版本走"的坑，是芯片移植的日常，见怪不怪。
 
 ---
@@ -292,39 +292,39 @@ moteos/port/ch32v/mote_port.h   ← 注意：RISC-V 用 ch32v 目录！
 ## 第 3 章：已有工程怎么接入（不动你的 SysTick）
 
 这一章要干成的事：**你手里已经有一个能跑的工程**（自己的 SysTick、自己的延时函数、
-自己的外设库），不想推倒重来，只想让 MoteOS"住进来"。好消息是：MoteOS 是客气的房客，
+自己的外设库），不想推倒重来，只想让 StardustOS"住进来"。好消息是：StardustOS 是客气的房客，
 你家的装修它一样不动——只借三个接口。
 
-先回忆第 1 章讲的规矩：MoteOS 自带的 `SysTick_Handler` 是**弱符号（替身）**，
+先回忆第 1 章讲的规矩：StardustOS 自带的 `SysTick_Handler` 是**弱符号（替身）**，
 你自己工程里的 `SysTick_Handler` 是**强符号（本尊）**。链接时替身见本尊就自动让位，
 不会打架报错。于是接入方案变得极简：
 
-1. `mote_port.c` **照常加入工程**——它的 `SysTick_Handler` 是**弱符号**，
+1. `star_port.c` **照常加入工程**——它的 `SysTick_Handler` 是**弱符号**，
    你自己的强符号 `SysTick_Handler` 会直接覆盖它，链接不报冲突
 2. 在你自己的 SysTick 中断函数（一般在 `stm32f10x_it.c` 或 `main.c`）里加一行：
 
 ```c
 void SysTick_Handler(void)
 {
-    mote_tick();   /* ← 就加这一行（固定拍；tickless 工程按 4.3 协议
-                    *    调用 mote_tick_advance 并恢复固定拍重装） */
+    star_tick();   /* ← 就加这一行（固定拍；tickless 工程按 4.3 协议
+                    *    调用 star_tick_advance 并恢复固定拍重装） */
     // ...你原来的代码，比如 Delay_Dec() 之类
 }
 ```
 
 > 白话解释：SysTick 报时器每次响铃，电话都会打到这个函数（向量表里登记的）。
-> 现在你只在开门时多喊一嗓子 `mote_tick()`——告诉内核"过了一拍"。
+> 现在你只在开门时多喊一嗓子 `star_tick()`——告诉内核"过了一拍"。
 > 你原来开门时干的活（延时计数之类的）原样保留，互不打扰。
 
-3. 空闲时的 wfi **不需要你写**：`mote_port.c` 自带的 `mote_idle()` 就是一条
-   wfi（固定拍）——低功耗默认就有。只有在你**把 `mote_port.c` 从工程剔除**、
-   自己写 port 实现（见第 4 章模板）时，才需要自写 `mote_idle`。注意它是
-   **强符号**（与弱符号 `SysTick_Handler` 不同），不能一边留着 `mote_port.c`
-   一边再写一个同名函数，否则链接报 `mote_idle multiply defined`。
+3. 空闲时的 wfi **不需要你写**：`star_port.c` 自带的 `star_idle()` 就是一条
+   wfi（固定拍）——低功耗默认就有。只有在你**把 `star_port.c` 从工程剔除**、
+   自己写 port 实现（见第 4 章模板）时，才需要自写 `star_idle`。注意它是
+   **强符号**（与弱符号 `SysTick_Handler` 不同），不能一边留着 `star_port.c`
+   一边再写一个同名函数，否则链接报 `star_idle multiply defined`。
    签名带 deadline 入参：
 
 ```c
-void mote_idle(uint32_t next_due)   /* next_due：内核给出的下一到期节拍 */
+void star_idle(uint32_t next_due)   /* next_due：内核给出的下一到期节拍 */
 {
     (void)next_due;                 /* 固定拍直接忽略；tickless 见 4.3 */
     __WFI();   /* 你的芯片头文件自带 */
@@ -334,26 +334,26 @@ void mote_idle(uint32_t next_due)   /* next_due：内核给出的下一到期节
 > 白话解释：内核空闲时会来问一句"没事干，我想睡会儿，怎么睡？"——
 > 这个函数就是你的回答："闭眼打盹（wfi）"。门铃一响它自动睁眼，不用你管。
 > `next_due` 是内核顺口告诉你的"下一件到点的事在几点"，固定拍模式下用不上，
-> 先无视它（`(void)next_due;` 就是"收到，但我不看"）。**留用 `mote_port.c`
+> 先无视它（`(void)next_due;` 就是"收到，但我不看"）。**留用 `star_port.c`
 > 的话这段代码一行都不用写**——它自带的回答就是 wfi。
 
 4. 头文件路径照第 1.4/2.4 节加。
 
-主循环同理：如果你必须保留自己的 `while(1)`，就用 `mote_poll()` 代替 `mote_loop()`：
+主循环同理：如果你必须保留自己的 `while(1)`，就用 `star_poll()` 代替 `star_loop()`：
 
 ```c
 while (1) {
-    if (!mote_poll()) {
-        /* 没事件可处理。想省电就调 mote_sleep()（内核会判断
+    if (!star_poll()) {
+        /* 没事件可处理。想省电就调 star_sleep()（内核会判断
          * 队列空且无到期项才真睡，见 4.2 的睡眠契约） */
     }
 }
 ```
 
-> 白话解释：`mote_loop()` 是内核自己的无限循环，一进去就不出来。
-> 你想保留自己的 `while(1)` 主循环？可以——用 `mote_poll()` 手动驱动内核：
+> 白话解释：`star_loop()` 是内核自己的无限循环，一进去就不出来。
+> 你想保留自己的 `while(1)` 主循环？可以——用 `star_poll()` 手动驱动内核：
 > 每圈喊它"查一次筐"（处理事件、响闹钟）。它返回"筐空了没事干"时，
-> 你想省电就喊 `mote_sleep()` 让它睡到下一次门铃。睡多久、真睡假睡由内核判断
+> 你想省电就喊 `star_sleep()` 让它睡到下一次门铃。睡多久、真睡假睡由内核判断
 > （睡眠契约见 4.2），你只是递了个"想睡"的请求。
 
 ---
@@ -361,7 +361,7 @@ while (1) {
 ## 第 4 章：没有现成 port 的芯片（照模板抄）
 
 这一章要干成的事：**第 0 章表格里没有你的芯片时，自己动手写"接线方案"**。
-好消息是：不用发明，只对照抄。打开 `moteos/port/mote_port_template.c`，
+好消息是：不用发明，只对照抄。打开 `stardustos/port/star_port_template.c`，
 它就是全部答案（一份填空式参考答案，注释里列了四步）。四步 = 内核要的
 三样东西（tick、wfi、临界区）+ 一个断言失败处理（4.5 节）。
 
@@ -373,14 +373,14 @@ while (1) {
 ```c
 void Timer1_ISR(void)          /* 你的 1ms 定时器中断，名字按芯片文档 */
 {
-    mote_tick();               /* 内核内部只做 count++，极快 */
+    star_tick();               /* 内核内部只做 count++，极快 */
     clear_timer1_flag();       /* 清你的中断标志 */
 }
 ```
 
 中断里**只干这两件事**。所有"到点了要做什么"都由内核在主循环里完成。
 
-> 白话解释：报时器响铃 → 你开门喊 `mote_tick()`（记一笔账："过了一拍"）→
+> 白话解释：报时器响铃 → 你开门喊 `star_tick()`（记一笔账："过了一拍"）→
 > 把门铃的响铃状态复位（不清的话它就一直响，等于每圈都在按铃）。
 > 注意别把任何"干活"塞进这里——开门的人待得越久，其他事情被耽误得越久。
 > 所以内核设计成：中断里只记账，真正"到点该干什么"留到主循环慢慢办。
@@ -388,7 +388,7 @@ void Timer1_ISR(void)          /* 你的 1ms 定时器中断，名字按芯片�
 ### 4.2 睡觉：wfi
 
 ```c
-void mote_idle(uint32_t next_due)
+void star_idle(uint32_t next_due)
 {
     (void)next_due;            /* 固定拍移植忽略；见下方 tickless 小节 */
     __asm volatile("wfi");     /* ARM/RISC-V 通用；其他架构查手册 */
@@ -409,11 +409,11 @@ void mote_idle(uint32_t next_due)
    "关中断 → 检查队列确实为空且无到期项 → 执行 wfi → 恢复中断"。
    ARM/RISC-V 的 wfi 在存在 pending 中断时会立即醒来，
    醒来后内核先恢复中断、让中断先处理，事件不会睡过头。
-   所以你的 `mote_idle()` 实现要极短（wfi 级别），不要在里面开中断。
+   所以你的 `star_idle()` 实现要极短（wfi 级别），不要在里面开中断。
 
    > 白话解释：内核睡觉前会先挂上"请勿打扰"牌子再查一遍账本（筐空没空、闹钟响没响），
    > 确认真没事才睡——查账和睡觉之间插不进任何意外。门铃在这期间响了也没关系：
-   > 芯片一闭眼就发现门铃是响的，立刻睁眼。所以你在 `mote_idle()` 里
+   > 芯片一闭眼就发现门铃是响的，立刻睁眼。所以你在 `star_idle()` 里
    > **只写闭眼这一件事**，千万别在里面摘牌子（开中断）或干别的。
 
 2. **tick 必须持续运行**。唤醒依赖中断（默认 SysTick 每 1ms 一次），
@@ -448,13 +448,13 @@ void mote_idle(uint32_t next_due)
 那就把报时器**拨到 3 秒后再响**，中间睡个整觉。
 
 `next_due` 是内核已知的**下一到期节拍**（定时器 + 延时投递中的最早者；
-`MOTE_TICK_NONE` = 无任何到期项）。固定拍移植忽略它即可；要省功耗，
-开启 `MOTE_TICKLESS=1`（配合 `MOTE_PORT_HCLK_HZ`）后，空闲时把 SysTick
+`STAR_TICK_NONE` = 无任何到期项）。固定拍移植忽略它即可；要省功耗，
+开启 `STAR_TICKLESS=1`（配合 `STAR_PORT_HCLK_HZ`）后，空闲时把 SysTick
 重装到 `next_due` 再睡，唤醒后恢复固定拍。参考实现见
-`moteos/port/mote_port.c`（Cortex-M 24 位 SysTick 裸寄存器访问 / WCH 青稞
+`stardustos/port/star_port.c`（Cortex-M 24 位 SysTick 裸寄存器访问 / WCH 青稞
 64 位比较寄存器，两者都已实现），自写移植时遵守同一协议：
 
-> **重要前提**：`MOTE_TICKLESS=1` 还需要 `MOTE_PORT_HCLK_HZ` 这个宏——
+> **重要前提**：`STAR_TICKLESS=1` 还需要 `STAR_PORT_HCLK_HZ` 这个宏——
 > 它告诉内核你芯片的主频是多少 Hz，**必须 ≥1000**（内核靠它把"下一件事几点"
 > 换算成"报时器拨到几"），并且**必须在工程级别全局定义**（对所有参与编译的
 > 文件都生效，只写在某个 .c 文件里是无效的）。填错了会怎样？报时器拨错刻度，
@@ -467,7 +467,7 @@ void mote_idle(uint32_t next_due)
 协议四条：
 
 1. **进入 idle 先追平时基**：上次重装以来已流逝但未入账的时间
-   （`mote_tick_advance(ms)` 入账；参考实现用"重装值 - 计数器剩余"直接
+   （`star_tick_advance(ms)` 入账；参考实现用"重装值 - 计数器剩余"直接
    换算，周期余数累计，跨唤醒零漂移）。**不要回读计数器做入账锚点**：
    写 VAL=0 后计数器存在 0 窗口（真实硬件一拍沿、分频时钟下可长达整拍；
    QEMU 的 ptimer 重载事件与 TCG 批执行之间同样有竞态），回读值为 0 时
@@ -501,11 +501,11 @@ void mote_idle(uint32_t next_due)
    > 但账照样算得对，只是省电的好处没了。真芯片上是否发生要实测。
 
 4. **SysTick 中断处理**（弱符号 `SysTick_Handler`，用户可重定义强符号接管）
-   负责把满拍时长入账（`mote_tick_advance`）并恢复固定拍重装。
+   负责把满拍时长入账（`star_tick_advance`）并恢复固定拍重装。
    wrap 判别靠 COUNTFLAG/CNTIF 读清零：ISR 与 idle 追平谁先读到标志
    谁入账整拍，另一方只入账部分拍——互斥不重复。
-   若用户重定义了 SysTick_Handler，记得自行调用 `mote_tick()`
-   （固定拍）或按同样协议 `mote_tick_advance()`（tickless）。
+   若用户重定义了 SysTick_Handler，记得自行调用 `star_tick()`
+   （固定拍）或按同样协议 `star_tick_advance()`（tickless）。
 
    > 白话解释：表转完一圈会举个小旗子（COUNTFLAG/CNTIF 标志）。开门的人
    > 和睡觉前结账的人谁先看到旗子，谁就把"一整拍"记进账本，并把旗子放倒；
@@ -516,7 +516,7 @@ void mote_idle(uint32_t next_due)
 
 **tickless 板级验证清单**（未经任何真实芯片验证，上板必测）：
 
-- [ ] `MOTE_PORT_HCLK_HZ` 与实际主频一致（含时钟树切换后的最终 HCLK）
+- [ ] `STAR_PORT_HCLK_HZ` 与实际主频一致（含时钟树切换后的最终 HCLK）
 - [ ] 空闲时 SysTick 中断间隔随 deadline 变化（示波器/电流波形）
 - [ ] 无到期项时长睡：空闲电流显著低于固定拍，且任意外设中断能唤醒
 - [ ] 提前唤醒（外设中断早于 deadline）后台时基无漂移：跑 1 小时，
@@ -526,7 +526,7 @@ void mote_idle(uint32_t next_due)
 
 > 白话解释最后一条清单里的"时钟树"：芯片的主频像一棵树的树干，
 > 各个外设的时钟是树枝，都能独立分叉调速。你的主频可能开机后被代码
-> 切换过（比如从内部振荡器切到外部晶振），填 `MOTE_PORT_HCLK_HZ` 时
+> 切换过（比如从内部振荡器切到外部晶振），填 `STAR_PORT_HCLK_HZ` 时
 > 要填**切换完成后最终那个值**，别填出厂默认值。
 
 ### 4.4 临界区：三个小函数（保存/恢复式）
@@ -536,27 +536,27 @@ void mote_idle(uint32_t next_due)
 往账本上写东西——账本就被写花了。对策：**写账本期间挂"请勿打扰"牌子**
 （关中断），写完再摘（开中断）。
 
-新建 `mote_port.h`，提供中断状态类型加三个函数：
+新建 `star_port.h`，提供中断状态类型加三个函数：
 
 ```c
-#ifndef MOTE_PORT_H
-#define MOTE_PORT_H
+#ifndef STAR_PORT_H
+#define STAR_PORT_H
 
-typedef uint32_t mote_crit_state_t;          /* 中断状态类型 */
+typedef uint32_t star_crit_state_t;          /* 中断状态类型 */
 
-static inline mote_crit_state_t mote_crit_enter(void)
+static inline star_crit_state_t star_crit_enter(void)
 {
     /* 1) 读出当前中断开关状态并保存 */
     /* 2) 关全局中断 */
     /* 3) 返回保存的状态 */
 }
 
-static inline void mote_crit_exit(mote_crit_state_t s)
+static inline void star_crit_exit(star_crit_state_t s)
 {
     /* 恢复 s 里的中断状态（不是无条件打开！） */
 }
 
-static inline uint32_t mote_crit_active(void)
+static inline uint32_t star_crit_active(void)
 {
     /* 返回当前是否处于"关中断"（1=关，0=开） */
 }
@@ -565,11 +565,11 @@ static inline uint32_t mote_crit_active(void)
 ```
 
 > 白话解释这三个函数各干什么：
-> - `mote_crit_enter()`：挂牌子。但挂牌前先看一眼牌子原来挂没挂，把"原来
+> - `star_crit_enter()`：挂牌子。但挂牌前先看一眼牌子原来挂没挂，把"原来
 >   的状态"记在小纸条上带回来；
-> - `mote_crit_exit(s)`：摘牌子。**按小纸条恢复原状**——原来就没挂牌子，
+> - `star_crit_exit(s)`：摘牌子。**按小纸条恢复原状**——原来就没挂牌子，
 >   摘掉；原来就挂着，继续挂；
-> - `mote_crit_active()`：问一句"牌子现在挂着吗？"（1=挂着，0=没挂）。
+> - `star_crit_active()`：问一句"牌子现在挂着吗？"（1=挂着，0=没挂）。
 >   内核用它自查状态，避免在不该摘牌子的时候摘牌子。
 
 **为什么必须保存/恢复而不是"关/开"？**
@@ -596,21 +596,21 @@ static inline uint32_t mote_crit_active(void)
 > "不依赖 CMSIS"意思是直接用汇编摸开关，不借厂商的工具箱——
 > 这样在 GCC、AC6、AC5 各种翻译官手里都能编译过。
 
-> **还差两个小东西（照抄现成 port 头即可）**：如果你要沿用 `mote_port.c`
-> 的 SysTick 弱符号与 tickless 参考实现，你的 `mote_port.h` 还要定义——
-> ① `MOTE_WEAK`：弱符号关键字（GCC/Clang 用 `__attribute__((weak))`）；
-> ② 平台标签 `MOTE_PORT_CORTEXM` 或 `MOTE_PORT_CH32`：tickless 下内核据此
+> **还差两个小东西（照抄现成 port 头即可）**：如果你要沿用 `star_port.c`
+> 的 SysTick 弱符号与 tickless 参考实现，你的 `star_port.h` 还要定义——
+> ① `STAR_WEAK`：弱符号关键字（GCC/Clang 用 `__attribute__((weak))`）；
+> ② 平台标签 `STAR_PORT_CORTEXM` 或 `STAR_PORT_CH32`：tickless 下内核据此
 > 选择 SysTick 访问方式（24 位向下计数 / 64 位比较寄存器），缺失会直接
 > `#error`。两样都只需从 `port/cm0plus` 或 `port/ch32v` 的对应行抄过来。
 
-### 4.5 断言失败处理：mote_assert_fail（第四步）
+### 4.5 断言失败处理：star_assert_fail（第四步）
 
-内核的 `MOTE_ASSERT` 默认开启，触发时会回调 `mote_assert_fail(file, line)`。
-它是**弱符号**：`mote_port.c` 自带一个"停机死循环"的默认实现；按本章自写
+内核的 `STAR_ASSERT` 默认开启，触发时会回调 `star_assert_fail(file, line)`。
+它是**弱符号**：`star_port.c` 自带一个"停机死循环"的默认实现；按本章自写
 port 时（模板已替你写好），可以把停机换成复位或先记录再停机：
 
 ```c
-void mote_assert_fail(const char *file, int line)
+void star_assert_fail(const char *file, int line)
 {
     /* 例：把 file/line 记进日志区，然后复位芯片（NVIC_SystemReset 等） */
     (void)file;
@@ -623,7 +623,7 @@ void mote_assert_fail(const char *file, int line)
 > （内部 bug）就熔断。默认熔断方式是"原地停机"，调试器一看就知道停在哪；
 > 产品里常换成"记录位置 → 复位"，让设备自己重启而不是死机。
 > 生产环境想彻底关掉断言（省 Flash/周期），构建时定义
-> `-DMOTE_ASSERT(x)=((void)0)` 即可。
+> `-DSTAR_ASSERT(x)=((void)0)` 即可。
 
 ---
 
@@ -639,38 +639,38 @@ void mote_assert_fail(const char *file, int line)
 ```c
 enum { EVT_LED = 0 };
 
-static mote_timer_t led_timer;
+static star_timer_t led_timer;
 
 static void led_handler(uint16_t evt, void *param, void *ctx)
 {
     GPIOB->ODR ^= (1u << 0);    /* 翻转 PB0 */
 }
 
-static const mote_evt_entry_t table[] = {
-    [EVT_LED] = MOTE_ENTRY(led_handler, NULL),
+static const star_evt_entry_t table[] = {
+    [EVT_LED] = STAR_ENTRY(led_handler, NULL),
 };
 
 int main(void)
 {
-    /* 参数 = MOTE_TICK_MS 毫秒内的时钟周期数（不是频率）。
+    /* 参数 = STAR_TICK_MS 毫秒内的时钟周期数（不是频率）。
      * 例：72MHz、1ms 节拍 → 72000000/1000 = 72000 个周期 */
-    SysTick_Config(SystemCoreClock / (1000 / MOTE_TICK_MS));
-    mote_init(table, sizeof(table) / sizeof(table[0]));
-    mote_timer_start(&led_timer, EVT_LED, NULL, 500, true);  /* 每500ms触发 */
-    mote_loop();
+    SysTick_Config(SystemCoreClock / (1000 / STAR_TICK_MS));
+    star_init(table, sizeof(table) / sizeof(table[0]));
+    star_timer_start(&led_timer, EVT_LED, NULL, 500, true);  /* 每500ms触发 */
+    star_loop();
 }
 ```
 
 > 白话解释：这第一段代码是"定闹钟"的标准样板。
 > - `enum { EVT_LED = 0 };`：给纸条编号起个名字，0 号纸条 = "该翻灯了"；
-> - `static mote_timer_t led_timer;`：买一个闹钟，static 保证它永远在场；
+> - `static star_timer_t led_timer;`：买一个闹钟，static 保证它永远在场；
 > - `led_handler`：工人。闹钟响了他来翻灯；
 > - `table`：值班表。登记"0 号纸条找 led_handler"；
 > - `SysTick_Config(...)`：给报时器定拍。参数是"一拍内芯片跳多少下"
 >   （不是频率！）——72MHz 芯片 1ms 跳 72000 下，公式一算正好；
-> - `mote_init(...)`：把值班表交给内核；
-> - `mote_timer_start(..., 500, true)`：闹钟每 500ms 响一次（true = 循环）；
-> - `mote_loop()`：内核主循环，一去不回。
+> - `star_init(...)`：把值班表交给内核；
+> - `star_timer_start(..., 500, true)`：闹钟每 500ms 响一次（true = 循环）；
+> - `star_loop()`：内核主循环，一去不回。
 >
 > 跑起来的世界：报时器每 1ms 响一次 → 内核心跳 +1 → 数到 500 → 闹钟响 →
 > 自动投 0 号纸条 → 主循环取出纸条、查值班表、喊 led_handler → 灯翻转。
@@ -683,7 +683,7 @@ enum { EVT_LED = 0, EVT_KEY = 1 };
 /* 按键中断里： */
 void EXTI0_IRQHandler(void)
 {
-    mote_event_post(EVT_KEY, NULL);          /* 从任意中断投递事件 */
+    star_event_post(EVT_KEY, NULL);          /* 从任意中断投递事件 */
     EXTI->PR = EXTI_PR_PR0;                  /* 清中断标志 */
 }
 
@@ -695,26 +695,26 @@ static void key_handler(uint16_t evt, void *param, void *ctx)
 ```
 
 > 白话解释：按键一响铃（EXTI0 中断），开门的人只干一件事——往筐里塞一张
-> "按键按了"的纸条（`mote_event_post`），再放倒门铃旗子，马上回去。
+> "按键按了"的纸条（`star_event_post`），再放倒门铃旗子，马上回去。
 > 真正"闪一下灯"的活留给工人 `key_handler` 在主循环里干。这就是
 > "中断里只递纸条，不干活"的完整示范。
 
-### 5.3 值传递：用 MOTE_P / MOTE_U32
+### 5.3 值传递：用 STAR_P / STAR_U32
 
 ```c
 /* 中断里投递 ADC 值（禁止传栈变量！） */
-mote_event_post(EVT_ADC, MOTE_P(adc_result));   /* 32位值塞进指针 */
+star_event_post(EVT_ADC, STAR_P(adc_result));   /* 32位值塞进指针 */
 
 /* handler 里取回： */
 static void adc_handler(uint16_t evt, void *param, void *ctx)
 {
-    uint32_t v = MOTE_U32(param);
+    uint32_t v = STAR_U32(param);
     if (v > 3000) { /* 过压处理 */ }
 }
 ```
 
 > 白话解释：纸条上能粘东西，但只能粘"一个小口袋"（一个指针）。想传数字？
-> `MOTE_P(数字)` 把数字**伪装成指针**粘上去，工人收到后 `MOTE_U32(param)`
+> `STAR_P(数字)` 把数字**伪装成指针**粘上去，工人收到后 `STAR_U32(param)`
 > 再还原成数字。注意注释里那条警告：粘的必须是"永远在场"的变量，
 > 绝不能是局部变量（局部变量所在的栈就像临时桌面，函数一走桌面就清空了，
 > 纸条上的地址会指向一堆垃圾）。想弄懂"为什么"，看《使用教程》2.4。
@@ -722,30 +722,30 @@ static void adc_handler(uint16_t evt, void *param, void *ctx)
 ### 5.4 邮箱：串口接收缓冲（大块数据）
 
 ```c
-MOTE_MAILBOX_DEF(uart_mb, EVT_UART, 32, 1);     /* 32格×1字节：逐字节收发 */
+STAR_MAILBOX_DEF(uart_mb, EVT_UART, 32, 1);     /* 32格×1字节：逐字节收发 */
 
 void USART1_IRQHandler(void)
 {
     uint8_t c = USART1->DR;
-    mote_mail_send(&uart_mb, &c, 1);            /* 中断里深拷贝入槽 */
-    /* 契约：len 必须 1..item_size，超长返回 MOTE_ERR_PARAM（不静默截断） */
+    star_mail_send(&uart_mb, &c, 1);            /* 中断里深拷贝入槽 */
+    /* 契约：len 必须 1..item_size，超长返回 STAR_ERR_PARAM（不静默截断） */
 }
 
 static void uart_handler(uint16_t evt, void *param, void *ctx)
 {
-    mote_mail_t *mb = param;                     /* param = 邮箱指针 */
+    star_mail_t *mb = param;                     /* param = 邮箱指针 */
     uint8_t c;
-    while (mote_mail_recv(mb, &c) > 0) {         /* 返回实际存入长度（此处恒为 1） */
+    while (star_mail_recv(mb, &c) > 0) {         /* 返回实际存入长度（此处恒为 1） */
         /* 处理 c */
     }
 }
 ```
 
 > 白话解释：纸条粘不动"一大块数据"（比如串口连续来的字节流），用快递柜
-> （邮箱）。`MOTE_MAILBOX_DEF` 一口气造好柜子：32 个格子、每格 1 字节，
-> 有货到自动投"来货了"纸条。串口每来一个字节，中断里 `mote_mail_send`
+> （邮箱）。`STAR_MAILBOX_DEF` 一口气造好柜子：32 个格子、每格 1 字节，
+> 有货到自动投"来货了"纸条。串口每来一个字节，中断里 `star_mail_send`
 > 把字节**复印一份放进格子**（放货）；工人被纸条叫来后逐格取货直到取空。
-> 发送长度必须 1 到格子大小之间，超了直接拒绝（返回 `MOTE_ERR_PARAM`），
+> 发送长度必须 1 到格子大小之间，超了直接拒绝（返回 `STAR_ERR_PARAM`），
 > 不会悄悄截断——宁可明着拒绝，也不偷偷丢数据。
 
 ### 5.5 任务层：周期心跳
@@ -756,22 +756,22 @@ static void heartbeat(uint16_t evt, void *param, void *ctx)
     /* 每 1000ms 自动被调用一次 */
 }
 
-static const mote_task_desc_t tasks[] = {
-    MOTE_TASK_DEF(1000, heartbeat, NULL),
+static const star_task_desc_t tasks[] = {
+    STAR_TASK_DEF(1000, heartbeat, NULL),
 };
 
 int main(void)
 {
-    /* ...mote_init 之后 */
-    mote_task_init(tasks, sizeof(tasks) / sizeof(tasks[0]));
-    mote_task_start(0);    /* 启动 0 号任务；不启动不占 RAM */
+    /* ...star_init 之后 */
+    star_task_init(tasks, sizeof(tasks) / sizeof(tasks[0]));
+    star_task_start(0);    /* 启动 0 号任务；不启动不占 RAM */
 }
 ```
 
 > 白话解释：闹钟响了要经过"投纸条 → 查表"两步，打卡机（任务层）更直接：
 > 到点直接喊工人，不走纸条筐。适合固定节奏的活——按键扫描、屏幕刷新、喂狗。
-> `MOTE_TASK_DEF(1000, heartbeat, NULL)` 登记一个"每 1000ms 喊一次"的工人；
-> `mote_task_start(0)` 让他上岗。不上岗的任务只占名单（Flash），不占 RAM——
+> `STAR_TASK_DEF(1000, heartbeat, NULL)` 登记一个"每 1000ms 喊一次"的工人；
+> `star_task_start(0)` 让他上岗。不上岗的任务只占名单（Flash），不占 RAM——
 > 所以名单可以多写，上岗数看需要。
 
 ---
@@ -782,23 +782,23 @@ int main(void)
 遇到症状时回来对号入座。
 
 **Q1：LED 不闪，程序像死了一样？**
-检查：① `SysTick_Config` 参数算对没有；② `mote_port.c` 加进工程没有；③ 主循环是不是 `mote_loop()` 而不是你自己的 `while(1)`。
+检查：① `SysTick_Config` 参数算对没有；② `star_port.c` 加进工程没有；③ 主循环是不是 `star_loop()` 而不是你自己的 `while(1)`。
 
 > 白话补充：这三条分别对应"报时器没拨对、心跳没接上、内核根本没在跑"。
 > 排查顺序就是"先看表拨没拨，再看线接没接，最后看人上没上班"。
 
 **Q2：串口狂收数据时会丢字符？**
-邮箱槽数调大（`MOTE_MAILBOX_DEF` 的第 3 个参数）；同时把队列槽数 `MOTE_EVT_QUEUE_SIZE` 调大。注意 `mote_mail_send` 返回 `MOTE_ERR_FULL` 时说明配置小了，返回 `MOTE_ERR_PARAM` 时说明发送长度超过格子大小（按实际报文长度设计 `item_size`，别给 1 字节报文开 64 字节的格子）。
+邮箱槽数调大（`STAR_MAILBOX_DEF` 的第 3 个参数）；同时把队列槽数 `STAR_EVT_QUEUE_SIZE` 调大。注意 `star_mail_send` 返回 `STAR_ERR_FULL` 时说明配置小了，返回 `STAR_ERR_PARAM` 时说明发送长度超过格子大小（按实际报文长度设计 `item_size`，别给 1 字节报文开 64 字节的格子）。
 
-> 白话补充：快递柜格子满了货就进不来（`MOTE_ERR_FULL` = 柜满）；
-> 货比格子大也会被拒收（`MOTE_ERR_PARAM` = 货不合格）。两个错别混：
+> 白话补充：快递柜格子满了货就进不来（`STAR_ERR_FULL` = 柜满）；
+> 货比格子大也会被拒收（`STAR_ERR_PARAM` = 货不合格）。两个错别混：
 > 丢字先查是不是柜满，查完柜满再查格子尺寸。
 
 **Q3：handler 里能调什么 API？**
-handler 运行在主循环上下文，所以**全部 API 都能调**：`mote_event_post*`、`mote_mail_send/recv`、`mote_timer_start/stop`、`mote_task_start/stop` 都没问题。
+handler 运行在主循环上下文，所以**全部 API 都能调**：`star_event_post*`、`star_mail_send/recv`、`star_timer_start/stop`、`star_task_start/stop` 都没问题。
 
 **Q4：中断里能调什么？**
-只有 `mote_event_post*`、`mote_mail_send`、`mote_tick`。定时器、任务 API 都只能在主循环上下文用。
+只有 `star_event_post*`、`star_mail_send`、`star_tick`。定时器、任务 API 都只能在主循环上下文用。
 
 > 白话补充：开门的人（中断）只许递纸条、放货、记心跳；闹钟、打卡机这些
 > "调度"性质的活只能由主循环来办。这不是限制，是设计——开门越快，大家等得越短。
@@ -810,15 +810,15 @@ handler 运行在主循环上下文，所以**全部 API 都能调**：`mote_eve
 > 想"过一会儿再干下一步"，用 5.1 的闹钟或延时纸条（《使用教程》2.3）。
 
 **Q6：wfi 没省电？**
-用电流表测：空闲时电流应明显下降。没降？检查 `mote_idle()` 是不是真的执行了 wfi（有没有被强符号覆盖，见第 3 章）。
-想进一步省电（避免每 1ms 醒一次）：开 tickless（`MOTE_TICKLESS=1`），
+用电流表测：空闲时电流应明显下降。没降？检查 `star_idle()` 是不是真的执行了 wfi（有没有被强符号覆盖，见第 3 章）。
+想进一步省电（避免每 1ms 醒一次）：开 tickless（`STAR_TICKLESS=1`），
 空闲时内核会把 SysTick 重装到下一 deadline 再睡，见 4.3 及其板级验证清单。
 
 > 白话补充：省电是可以用电流表直接看到的"硬指标"。没省电，先怀疑芯片
 > 根本没闭眼（函数被覆盖或没实现）；闭眼了还想更省，就上 tickless。
 
-**Q7：MOTE_TICK_MS 改成 10 会怎样？**
-tick 变成 10ms 一拍，`SysTick_Config(SystemCoreClock / (1000 / MOTE_TICK_MS))` 保持这个公式即可，定时器精度变粗但更省电。tickless 模式下 deadline 计算也基于这一拍宽，无需额外处理。取值范围 1..1000，越界会编译期 `#error` 直接拦下（防静默出错）。
+**Q7：STAR_TICK_MS 改成 10 会怎样？**
+tick 变成 10ms 一拍，`SysTick_Config(SystemCoreClock / (1000 / STAR_TICK_MS))` 保持这个公式即可，定时器精度变粗但更省电。tickless 模式下 deadline 计算也基于这一拍宽，无需额外处理。取值范围 1..1000，越界会编译期 `#error` 直接拦下（防静默出错）。
 
 > 白话补充：心跳从 1ms 一拍放缓到 10ms 一拍，闹钟的最小刻度就变成 10ms，
 > 精度粗了、但醒来的次数少了、更省电。公式不用改——它本来就是按拍宽算的。
@@ -830,7 +830,7 @@ tick 变成 10ms 一拍，`SysTick_Config(SystemCoreClock / (1000 / MOTE_TICK_MS
 > 空占着地方（Flash）。编号从 0 连续排，一格都不浪费。
 
 **Q9：队列满了怎么办？**
-`mote_event_post` 返回 `MOTE_ERR_FULL`，你可以重试或丢弃；状态类事件用 `mote_event_post_replace`（同 ID 只保留最新）。
+`star_event_post` 返回 `STAR_ERR_FULL`，你可以重试或丢弃；状态类事件用 `star_event_post_replace`（同 ID 只保留最新）。
 
 > 白话补充：筐满时内核不硬塞也不崩，而是把"满了"如实告诉你，怎么处理由你定。
 > "按键当前是按下还是松开"这类只关心最新状态的事件，用 replace 版：同编号
@@ -854,11 +854,11 @@ tick 变成 10ms 一拍，`SysTick_Config(SystemCoreClock / (1000 / MOTE_TICK_MS
 
 - [ ] 编译 0 error 0 warning（开 `-Wall -Wextra -Werror`，与 CI 同口径）
 - [ ] 内核体积核对：map 文件里内核三件套 text <2.75KB（RV32）/ <2.5KB（M0+）、移植层 port text <512B、RAM <512B（本机实测 M0+ 三件套 2297B / port 14B / RAM 280B，见 README 与 docs/test.md；体积随工具链版本小幅浮动，以 CI 阈值与你自己 map 文件为准）
-- [ ] map 文件里 `SysTick_Handler` 只出现一次（在 mote_port.o 里）
+- [ ] map 文件里 `SysTick_Handler` 只出现一次（在 star_port.o 里）
 - [ ] LED 闪烁周期用逻辑分析仪/示波器实测 ≈ 设定值
-- [ ] **中断延迟实测**：DWT CYCCNT 或 GPIO 示波器测 `mote_mail_send` 最坏路径（方法见使用教程附录 A），确认符合你的延迟预算
+- [ ] **中断延迟实测**：DWT CYCCNT 或 GPIO 示波器测 `star_mail_send` 最坏路径（方法见使用教程附录 A），确认符合你的延迟预算
 - [ ] **低功耗唤醒实测**（RISC-V 青稞必做）：空闲电流明显下降（wfi 生效）+ tick 准时唤醒、事件不睡过头
-- [ ] **tickless 专项**（若开启 `MOTE_TICKLESS=1`）：按 4.3 的 tickless 板级验证清单逐项实测（HCLK 换算、提前唤醒追平、计数器位宽、长睡功耗）
+- [ ] **tickless 专项**（若开启 `STAR_TICKLESS=1`）：按 4.3 的 tickless 板级验证清单逐项实测（HCLK 换算、提前唤醒追平、计数器位宽、长睡功耗）
 - [ ] **周期相位实测**：示波器观察连续周期触发间隔，确认无累积漂移（尤其 handler 慢的场景）
 - [ ] 串口高波特率（115200 以上）连续收发不丢字
 - [ ] 空闲电流明显下降（wfi 生效）
@@ -874,5 +874,5 @@ tick 变成 10ms 一拍，`SysTick_Config(SystemCoreClock / (1000 / MOTE_TICK_MS
 > - **看门狗**：芯片里的"防死机保险丝"，程序卡死就自动重启。有它的时候，
 >   重启 100 次看会不会卡在哪个环节。
 
-全部打勾，恭喜：这颗芯片的 MoteOS 移植完成。欢迎把实测数据回馈给仓库，
+全部打勾，恭喜：这颗芯片的 StardustOS 移植完成。欢迎把实测数据回馈给仓库，
 让下一颗芯片的移植者少踩一个坑。

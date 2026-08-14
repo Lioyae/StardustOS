@@ -1,6 +1,6 @@
-# MoteOS - event-driven cooperative kernel for small MCUs
+# StardustOS - event-driven cooperative kernel for small MCUs
 # Copyright (c) 2026 Lioyae
-# https://github.com/Lioyae/MoteOS
+# https://github.com/Lioyae/StardustOS
 # SPDX-License-Identifier: Apache-2.0
 
 name: build
@@ -27,10 +27,10 @@ jobs:
         run: |
           ctest --test-dir build --output-on-failure
           for i in $(seq 1 20); do
-            MOTE_TEST_SEED=$i ./build/test_moteos || exit 1
+            STAR_TEST_SEED=$i ./build/test_stardustos || exit 1
           done
           for i in $(seq 1 10); do
-            MOTE_TEST_SEED=$i ./build/test_moteos_max || exit 1
+            STAR_TEST_SEED=$i ./build/test_stardustos_max || exit 1
           done
 
   sanitizers:
@@ -48,7 +48,7 @@ jobs:
         run: |
           ctest --test-dir build-san --output-on-failure
           for i in $(seq 1 5); do
-            MOTE_TEST_SEED=$i ./build-san/test_moteos || exit 1
+            STAR_TEST_SEED=$i ./build-san/test_stardustos || exit 1
           done
 
   cross-compile:
@@ -67,13 +67,13 @@ jobs:
       - name: Compile Cortex-M0+ (thumb, -Os, size check)
         run: |
           arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -Os -mcpu=cortex-m0plus -mthumb \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/cm0plus -Itests/stubs
-          arm-none-eabi-size -t mote.o mote_task.o mote_mail.o mote_port.o
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/cm0plus -Itests/stubs
+          arm-none-eabi-size -t star.o star_task.o star_mail.o star_port.o
           # 内核三件套与移植层分账断言：移植层（SysTick/临界区/idle）单独设限
-          TEXT_K=$(arm-none-eabi-size -t mote.o mote_task.o mote_mail.o | tail -1 | awk '{print $1}')
-          TEXT_P=$(arm-none-eabi-size mote_port.o | tail -1 | awk '{print $1}')
-          RAM=$(arm-none-eabi-size -t mote.o mote_task.o mote_mail.o mote_port.o | tail -1 | awk '{print $2+$3}')
+          TEXT_K=$(arm-none-eabi-size -t star.o star_task.o star_mail.o | tail -1 | awk '{print $1}')
+          TEXT_P=$(arm-none-eabi-size star_port.o | tail -1 | awk '{print $1}')
+          RAM=$(arm-none-eabi-size -t star.o star_task.o star_mail.o star_port.o | tail -1 | awk '{print $2+$3}')
           echo "m0plus kernel: text=${TEXT_K}B port=${TEXT_P}B ram=${RAM}B"
           test "$TEXT_K" -lt 2560 || { echo "kernel text too large"; exit 1; }
           test "$TEXT_P" -lt 512 || { echo "port text too large"; exit 1; }
@@ -83,46 +83,46 @@ jobs:
       - name: Compile Cortex-M3 (thumb)
         run: |
           arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -mcpu=cortex-m3 -mthumb \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/cm3 -Itests/stubs
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/cm3 -Itests/stubs
           rm -f *.o
 
       - name: Compile Cortex-M0+ worst-case config (queue 255, delayed 16)
         run: |
           arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -Os -mcpu=cortex-m0plus -mthumb \
-            -DMOTE_EVT_QUEUE_SIZE=255 -DMOTE_DELAYED_MAX=16 \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/cm0plus -Itests/stubs
-          arm-none-eabi-size -t mote.o mote_task.o mote_mail.o
+            -DSTAR_EVT_QUEUE_SIZE=255 -DSTAR_DELAYED_MAX=16 \
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/cm0plus -Itests/stubs
+          arm-none-eabi-size -t star.o star_task.o star_mail.o
           rm -f *.o
 
-      - name: Compile Cortex-M0+ tickless (MOTE_TICKLESS=1)
+      - name: Compile Cortex-M0+ tickless (STAR_TICKLESS=1)
         run: |
           arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -Os -mcpu=cortex-m0plus -mthumb \
-            -DMOTE_TICKLESS=1 -DMOTE_PORT_HCLK_HZ=24000000u \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/cm0plus -Itests/stubs
-          arm-none-eabi-size -t mote.o mote_task.o mote_mail.o mote_port.o
+            -DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=24000000u \
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/cm0plus -Itests/stubs
+          arm-none-eabi-size -t star.o star_task.o star_mail.o star_port.o
           rm -f *.o
 
-      - name: Compile Cortex-M3 tickless (MOTE_TICKLESS=1)
+      - name: Compile Cortex-M3 tickless (STAR_TICKLESS=1)
         run: |
           arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -mcpu=cortex-m3 -mthumb \
-            -DMOTE_TICKLESS=1 -DMOTE_PORT_HCLK_HZ=72000000u \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/cm3 -Itests/stubs
+            -DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=72000000u \
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/cm3 -Itests/stubs
           rm -f *.o
 
       - name: Compile RISC-V RV32 (WCH QingKe, -Os, size check)
         run: |
           riscv-none-elf-gcc -std=c99 -Wall -Wextra -Werror -Os -march=rv32imc_zicsr -mabi=ilp32 \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/ch32v -Itests/stubs
-          riscv-none-elf-size -t mote.o mote_task.o mote_mail.o mote_port.o
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/ch32v -Itests/stubs
+          riscv-none-elf-size -t star.o star_task.o star_mail.o star_port.o
           # 内核三件套与移植层分账断言（移植层含 SysTick/临界区/idle）
-          TEXT_K=$(riscv-none-elf-size -t mote.o mote_task.o mote_mail.o | tail -1 | awk '{print $1}')
-          TEXT_P=$(riscv-none-elf-size mote_port.o | tail -1 | awk '{print $1}')
-          RAM=$(riscv-none-elf-size -t mote.o mote_task.o mote_mail.o mote_port.o | tail -1 | awk '{print $2+$3}')
+          TEXT_K=$(riscv-none-elf-size -t star.o star_task.o star_mail.o | tail -1 | awk '{print $1}')
+          TEXT_P=$(riscv-none-elf-size star_port.o | tail -1 | awk '{print $1}')
+          RAM=$(riscv-none-elf-size -t star.o star_task.o star_mail.o star_port.o | tail -1 | awk '{print $2+$3}')
           echo "rv32 kernel: text=${TEXT_K}B port=${TEXT_P}B ram=${RAM}B"
           test "$TEXT_K" -lt 2816 || { echo "kernel text too large"; exit 1; }
           test "$TEXT_P" -lt 512 || { echo "port text too large"; exit 1; }
@@ -132,19 +132,19 @@ jobs:
       - name: Compile RISC-V RV32 worst-case config (queue 255, delayed 16)
         run: |
           riscv-none-elf-gcc -std=c99 -Wall -Wextra -Werror -Os -march=rv32imc_zicsr -mabi=ilp32 \
-            -DMOTE_EVT_QUEUE_SIZE=255 -DMOTE_DELAYED_MAX=16 \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/ch32v -Itests/stubs
-          riscv-none-elf-size -t mote.o mote_task.o mote_mail.o
+            -DSTAR_EVT_QUEUE_SIZE=255 -DSTAR_DELAYED_MAX=16 \
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/ch32v -Itests/stubs
+          riscv-none-elf-size -t star.o star_task.o star_mail.o
           rm -f *.o
 
-      - name: Compile RISC-V RV32 tickless (MOTE_TICKLESS=1)
+      - name: Compile RISC-V RV32 tickless (STAR_TICKLESS=1)
         run: |
           riscv-none-elf-gcc -std=c99 -Wall -Wextra -Werror -Os -march=rv32imc_zicsr -mabi=ilp32 \
-            -DMOTE_TICKLESS=1 -DMOTE_PORT_HCLK_HZ=48000000u \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/ch32v -Itests/stubs
-          riscv-none-elf-size -t mote.o mote_task.o mote_mail.o mote_port.o
+            -DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=48000000u \
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/ch32v -Itests/stubs
+          riscv-none-elf-size -t star.o star_task.o star_mail.o star_port.o
           rm -f *.o
 
       - name: Compile STM32F103 example against real CMSIS/ST headers
@@ -158,12 +158,12 @@ jobs:
           git -C /tmp/cmsis-f1 fetch --depth 1 origin c8e9a4a4f16b6d2cb2a2083cbe5161025280fb22
           git -C /tmp/cmsis-f1 checkout --detach FETCH_HEAD
           # 例程启用了 tickless：这两个宏必须工程级全局生效（例程 main.c 内的
-          # define 只作用于该文件，mote_port.c 靠命令行 -D 拿到同值）
+          # define 只作用于该文件，star_port.c 靠命令行 -D 拿到同值）
           arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -mcpu=cortex-m3 -mthumb \
-            -DMOTE_TICKLESS=1 -DMOTE_PORT_HCLK_HZ=72000000u \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
+            -DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=72000000u \
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
             examples/stm32f103/main.c \
-            -Imoteos -Imoteos/port/cm3 \
+            -Istardustos -Istardustos/port/cm3 \
             -I/tmp/cmsis5/CMSIS/Core/Include \
             -I/tmp/cmsis-f1/Include
 
@@ -178,10 +178,10 @@ jobs:
           USER=/tmp/ch32v003/EVT/EXAM/ADC/ADC_DMA/User
           # 例程启用了 tickless：宏须工程级全局生效（-D 与 main.c 内定义同值）
           riscv-none-elf-gcc -std=c99 -Wall -Wextra -Werror -march=rv32imc_zicsr_zifencei -mabi=ilp32 \
-            -DMOTE_TICKLESS=1 -DMOTE_PORT_HCLK_HZ=48000000u \
-            -c moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
+            -DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=48000000u \
+            -c stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
             examples/ch32v003/main.c \
-            -Imoteos -Imoteos/port/ch32v \
+            -Istardustos -Istardustos/port/ch32v \
             -I"$SDK/Core" -I"$SDK/Peripheral/inc" -I"$SDK/Debug" -I"$USER"
 
   qemu-smoke:
@@ -198,10 +198,10 @@ jobs:
         run: |
           arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -Os -mcpu=cortex-m3 -mthumb \
             -ffreestanding -nostdlib -T tests/qemu/cm3/link.ld \
-            -o /tmp/moteos_qemu.elf \
+            -o /tmp/stardustos_qemu.elf \
             tests/qemu/cm3/main.c tests/qemu/cm3/startup.c \
-            moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/cm3
+            stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/cm3
 
       - name: Run in QEMU (boot, vectors, SysTick, timer→event flow)
         run: |
@@ -210,7 +210,7 @@ jobs:
           timeout 60s qemu-system-arm -M stm32vldiscovery -cpu cortex-m3 \
             -nographic -monitor none \
             -semihosting-config enable=on,target=native \
-            -kernel /tmp/moteos_qemu.elf 2>&1 | tee /tmp/qemu.log
+            -kernel /tmp/stardustos_qemu.elf 2>&1 | tee /tmp/qemu.log
           grep -q "QEMU_PASS" /tmp/qemu.log || { echo "smoke test failed"; exit 1; }
           ! grep -q "QEMU_FAIL" /tmp/qemu.log || { echo "smoke test reported failure"; exit 1; }
 
@@ -221,11 +221,11 @@ jobs:
           # 内完成；膨胀后 1 tick-ms=24 计数器周期，入账数学与换算率无关
           arm-none-eabi-gcc -std=c99 -Wall -Wextra -Werror -Os -mcpu=cortex-m3 -mthumb \
             -ffreestanding -nostdlib -T tests/qemu/cm3/link.ld \
-            -DMOTE_TICKLESS=1 -DMOTE_PORT_HCLK_HZ=24000u \
-            -o /tmp/moteos_qemu_tickless.elf \
+            -DSTAR_TICKLESS=1 -DSTAR_PORT_HCLK_HZ=24000u \
+            -o /tmp/stardustos_qemu_tickless.elf \
             tests/qemu/cm3/main_tickless.c tests/qemu/cm3/startup.c \
-            moteos/mote.c moteos/mote_task.c moteos/mote_mail.c moteos/port/mote_port.c \
-            -Imoteos -Imoteos/port/cm3
+            stardustos/star.c stardustos/star_task.c stardustos/star_mail.c stardustos/port/star_port.c \
+            -Istardustos -Istardustos/port/cm3
 
       - name: Run tickless in QEMU (accounting, segmented naps, drift check)
         run: |
@@ -236,7 +236,7 @@ jobs:
           timeout 60s qemu-system-arm -M stm32vldiscovery -cpu cortex-m3 \
             -nographic -monitor none \
             -semihosting-config enable=on,target=native \
-            -kernel /tmp/moteos_qemu_tickless.elf 2>&1 | tee /tmp/qemu_tickless.log
+            -kernel /tmp/stardustos_qemu_tickless.elf 2>&1 | tee /tmp/qemu_tickless.log
           grep -q "QEMU_PASS" /tmp/qemu_tickless.log || { echo "tickless smoke failed"; exit 1; }
           ! grep -q "QEMU_FAIL" /tmp/qemu_tickless.log || { echo "tickless smoke reported failure"; exit 1; }
 
@@ -273,4 +273,4 @@ jobs:
         run: |
           cppcheck --enable=warning,performance,portability --std=c99 \
             --inline-suppr --error-exitcode=1 \
-            -Imoteos -Imoteos/port/host -Itests moteos
+            -Istardustos -Istardustos/port/host -Itests stardustos

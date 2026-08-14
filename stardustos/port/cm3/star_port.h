@@ -1,37 +1,37 @@
 /*
- * MoteOS - event-driven cooperative kernel for small MCUs
+ * StardustOS - event-driven cooperative kernel for small MCUs
  * Copyright (c) 2026 Lioyae
- * https://github.com/Lioyae/MoteOS
+ * https://github.com/Lioyae/StardustOS
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef MOTE_PORT_H
-#define MOTE_PORT_H
+#ifndef STAR_PORT_H
+#define STAR_PORT_H
 
-/* ARM Cortex-M0+（CIU32F003、CH32M030、STM32F030 等）
+/* ARM Cortex-M3（STM32F103 等）
  * 临界区用裸内联汇编实现（PRIMASK/CPSID），不依赖 CMSIS 头文件：
  * 无包含顺序要求，任何工程都能直接编译。
  * 同时兼容 GCC / ArmClang(AC6) 与 armcc(AC5) */
 
 #include <stdint.h>
 
-typedef uint32_t mote_crit_state_t;
+typedef uint32_t star_crit_state_t;
 
-/* 体系标签：mote_port.c 的 tickless 实现据此选择 SysTick 访问方式
+/* 体系标签：star_port.c 的 tickless 实现据此选择 SysTick 访问方式
  * （Cortex-M：24 位向下计数，裸寄存器地址访问） */
-#define MOTE_PORT_CORTEXM 1
+#define STAR_PORT_CORTEXM 1
 
-/* 弱符号关键字：mote_port.c 的 SysTick_Handler 用弱符号定义，
- * 用户已有 SysTick 时直接重定义强符号即可接管，无需剔除 mote_port.c */
+/* 弱符号关键字：star_port.c 的 SysTick_Handler 用弱符号定义，
+ * 用户已有 SysTick 时直接重定义强符号即可接管，无需剔除 star_port.c */
 #if defined(__CC_ARM)
-#define MOTE_WEAK __weak
+#define STAR_WEAK __weak
 #else
-#define MOTE_WEAK __attribute__((weak))
+#define STAR_WEAK __attribute__((weak))
 #endif
 
-static inline mote_crit_state_t mote_crit_enter(void)
+static inline star_crit_state_t star_crit_enter(void)
 {
-    mote_crit_state_t s;
+    star_crit_state_t s;
 #if defined(__CC_ARM)
     __asm { MRS s, PRIMASK }
     __asm { CPSID i }
@@ -46,7 +46,7 @@ static inline mote_crit_state_t mote_crit_enter(void)
     return s;
 }
 
-static inline void mote_crit_exit(mote_crit_state_t s)
+static inline void star_crit_exit(star_crit_state_t s)
 {
 #if defined(__CC_ARM)
     __asm { MSR PRIMASK, s }
@@ -55,7 +55,7 @@ static inline void mote_crit_exit(mote_crit_state_t s)
 #endif
 }
 
-static inline uint32_t mote_crit_active(void)
+static inline uint32_t star_crit_active(void)
 {
     uint32_t s;
 #if defined(__CC_ARM)

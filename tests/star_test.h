@@ -1,11 +1,11 @@
 /*
- * MoteOS - event-driven cooperative kernel for small MCUs
+ * StardustOS - event-driven cooperative kernel for small MCUs
  * Copyright (c) 2026 Lioyae
- * https://github.com/Lioyae/MoteOS
+ * https://github.com/Lioyae/StardustOS
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef MOTE_TEST_H
-#define MOTE_TEST_H
+#ifndef STAR_TEST_H
+#define STAR_TEST_H
 
 #include <stdio.h>
 

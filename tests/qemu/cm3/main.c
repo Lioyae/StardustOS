@@ -1,7 +1,7 @@
 /*
- * MoteOS - event-driven cooperative kernel for small MCUs
+ * StardustOS - event-driven cooperative kernel for small MCUs
  * Copyright (c) 2026 Lioyae
- * https://github.com/Lioyae/MoteOS
+ * https://github.com/Lioyae/StardustOS
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  *
  * 验证范围（比交叉编译多一层）：
  *   1. 向量表/启动流程正确，Reset 后进入 main
- *   2. SysTick 向量正确接到 mote_port.c 的弱符号 SysTick_Handler → mote_tick
+ *   2. SysTick 向量正确接到 star_port.c 的弱符号 SysTick_Handler → star_tick
  *   3. tick 驱动定时器到期 → 事件投递 → handler 派发（完整事件流）
  *
  * 判定方式：stdout 打印 QEMU_PASS / QEMU_FAIL（CI 抓取关键字判定，
@@ -19,7 +19,7 @@
  * 非板级验证：外设时序、临界区实测时长不在此列。 */
 
 #include <stdint.h>
-#include "mote.h"
+#include "star.h"
 
 /* ---- SysTick（CMSIS 寄存器布局，直接字面量，无器件头依赖） ---- */
 #define SYST_CSR (*(volatile uint32_t *)0xE000E010u) /* 控制/状态 */
@@ -57,11 +57,11 @@ static void blink_handler(uint16_t evt, void *param, void *ctx)
     s_blinks++;
 }
 
-static const mote_evt_entry_t evt_table[] = {
-    [0] = MOTE_ENTRY(blink_handler, NULL),
+static const star_evt_entry_t evt_table[] = {
+    [0] = STAR_ENTRY(blink_handler, NULL),
 };
 
-static mote_timer_t blink_timer;
+static star_timer_t blink_timer;
 
 static void systick_start(void)
 {
@@ -72,18 +72,18 @@ static void systick_start(void)
 
 int main(void)
 {
-    mote_init(evt_table, 1);
-    mote_timer_start(&blink_timer, 0, NULL, 500, true);
+    star_init(evt_table, 1);
+    star_timer_start(&blink_timer, 0, NULL, 500, true);
 
-    /* 先配定时器再开 tick：mote_timer_start 读到的 s_tick 为 0，
+    /* 先配定时器再开 tick：star_timer_start 读到的 s_tick 为 0，
      * due = 500（第 500/1000 拍各触发一次） */
     systick_start();
 
-    /* 守卫用 mote_ticks() 计虚拟时间而非轮询次数——QEMU TCG 下宿主速度
+    /* 守卫用 star_ticks() 计虚拟时间而非轮询次数——QEMU TCG 下宿主速度
      * 与虚拟时间脱钩。SysTick 若未接到（向量表问题）则 ticks 停在 0，
      * 死循环被 CI 的 timeout 杀掉判失败 */
-    while (s_blinks < 2 && mote_ticks() < 5000u) {
-        mote_poll();
+    while (s_blinks < 2 && star_ticks() < 5000u) {
+        star_poll();
     }
 
     if (s_blinks < 2) {

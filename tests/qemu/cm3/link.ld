@@ -1,4 +1,4 @@
-/* MoteOS - QEMU 冒烟测试链接脚本（stm32vldiscovery = STM32F100：128KB Flash / 8KB RAM） */
+/* StardustOS - QEMU 冒烟测试链接脚本（stm32vldiscovery = STM32F100：128KB Flash / 8KB RAM） */
 
 MEMORY
 {

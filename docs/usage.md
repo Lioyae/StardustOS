@@ -1,4 +1,4 @@
-# MoteOS 使用教程（从零开始）
+# StardustOS 使用教程（从零开始）
 
 > 本文写给**从来没有接触过单片机编程的读者**：不需要会 C 语言，不需要认识
 > "寄存器"、"中断"、"编译"这些词。凡是正文里要用到的技术名词，第一次出现时
@@ -24,8 +24,8 @@
 | **ctx** | context = 上下文 | 注册 handler 时你交给他的"自备工作台"。内核喊 handler 时原样转交。用不用随你 |
 | **post** | 投递 | 把纸条塞进传达室门口筐里的动作。不是"马上干活"，而是"放进筐里排队" |
 | **队列（queue）** | — | 传达室门口的筐：先放进去的纸条先被处理 |
-| **tick** | 节拍 | 内核的心跳，每 `MOTE_TICK_MS`（默认 1ms）跳一次，由硬件定时器中断驱动 |
-| **tickless** | 无节拍空闲 | 低功耗模式：没事情时内核把 tick 定时器拨到"下一件到点的事"再睡，不再每 1ms 醒一次（配置 `MOTE_TICKLESS=1`，见移植教程） |
+| **tick** | 节拍 | 内核的心跳，每 `STAR_TICK_MS`（默认 1ms）跳一次，由硬件定时器中断驱动 |
+| **tickless** | 无节拍空闲 | 低功耗模式：没事情时内核把 tick 定时器拨到"下一件到点的事"再睡，不再每 1ms 醒一次（配置 `STAR_TICKLESS=1`，见移植教程） |
 | **注册表** | — | 一张对照表：纸条编号 → 对应的工人。内核靠它知道"纸条该给谁" |
 | **定时器（timer）** | — | 闹钟。到点自动往筐里投一张纸条 |
 | **邮箱（mailbox）** | — | 快递柜。传递"一大块数据"（数组/结构体）用的 |
@@ -36,8 +36,8 @@
 
 | 写法 | 含义 | 例子 |
 |---|---|---|
-| `_t` 结尾的类型 | `_t` = type。C 语言惯例：**以 _t 结尾的名字是"自定义类型"** | `mote_timer_t` = MoteOS 的定时器类型；`uint32_t` = 32 位无符号整数 |
-| `MOTE_` 前缀 | MoteOS 专属标记 | 防止和你的代码、其他库撞名。看到 `MOTE_` 开头就知道是内核的东西 |
+| `_t` 结尾的类型 | `_t` = type。C 语言惯例：**以 _t 结尾的名字是"自定义类型"** | `star_timer_t` = StardustOS 的定时器类型；`uint32_t` = 32 位无符号整数 |
+| `STAR_` 前缀 | StardustOS 专属标记 | 防止和你的代码、其他库撞名。看到 `STAR_` 开头就知道是内核的东西 |
 | `void *` | 万能指针 | 可以指向任何类型的数据。`param` 就用它，所以能装任何东西 |
 | `uint8_t / uint16_t / uint32_t` | 定宽整数 | 8/16/32 位的无符号整数。跨芯片大小永远不变，嵌入式代码的标准写法 |
 | `static` | 两种作用 | ① 修饰变量：让变量**永久存在**（放全局区，函数返回也不消失）；② 修饰函数：只在本文件内可见 |
@@ -52,7 +52,7 @@
 
 **观念一：handler 是"被叫去的"，不是"主动跑"的。**
 传统写法：你写 main，你控制流程，你想什么时候干什么就干什么。
-MoteOS 写法：你写 handler（工人），**内核在纸条到来时喊他**。工人干完活
+StardustOS 写法：你写 handler（工人），**内核在纸条到来时喊他**。工人干完活
 必须马上回来（毫秒级），把控制权交回内核。
 
 **观念二：中断里只许"递纸条"，不许"干活"。**
@@ -62,7 +62,7 @@ MoteOS 写法：你写 handler（工人），**内核在纸条到来时喊他**�
 
 ### 0.4 先认识那台"指甲盖电脑"（新增小节）
 
-MoteOS 是给**单片机**用的。单片机（也写作 MCU）就是一块比指甲盖还小的电脑：
+StardustOS 是给**单片机**用的。单片机（也写作 MCU）就是一块比指甲盖还小的电脑：
 里面有一颗会算数的大脑，有一点点记忆，还伸出几根"腿"（引脚）去连外面的灯、
 按键、传感器。它没有鼠标键盘，全靠代码指挥。下面这些词，第 1 章起会反复出现：
 
@@ -73,7 +73,7 @@ MoteOS 是给**单片机**用的。单片机（也写作 MCU）就是一块比�
 | **时钟 / 主频（Hz）** | 芯片的心跳 | 一秒跳几次。72MHz = 一秒跳 7200 万次。跳一次，芯片就干一步活 |
 | **中断** | 门铃 | 芯片正干活，门铃响了，就放下手里的活去开门，开完门回来接着干 |
 | **SysTick** | 芯片自带的"自动报时器" | 到点就来按门铃，提醒内核"又过去 1 毫秒啦"。怎么接线见《移植教程》 |
-| **tick（节拍）** | 报时器响一下 | 报时器每 `MOTE_TICK_MS`（默认 1 毫秒）响一次，响一次 = 时间走一格 |
+| **tick（节拍）** | 报时器响一下 | 报时器每 `STAR_TICK_MS`（默认 1 毫秒）响一次，响一次 = 时间走一格 |
 | **中断处理函数（ISR）** | 开门时干的那点活 | 门铃一响芯片去开门，开门干的这点活一定要快，别让客人久等 |
 | **wfi** | 让芯片"闭眼打盹"的指令 | 没事干时打盹省电，门铃一响自动醒 |
 | **临界区** | 干活时挂"请勿打扰"牌子的时间段 | 这段时间谁都不许打断（不许响门铃），因为手上的活必须一口气干完 |
@@ -87,16 +87,16 @@ MoteOS 是给**单片机**用的。单片机（也写作 MCU）就是一块比�
 
 ---
 
-## 第 1 章：MoteOS 的思考方式 + 第一个程序（点灯）
+## 第 1 章：StardustOS 的思考方式 + 第一个程序（点灯）
 
 ### 1.1 一张图看懂内核
 
-把 MoteOS 想象成一家小工厂：
+把 StardustOS 想象成一家小工厂：
 
 - **事件（event）** = 一张纸条，写着"发生了什么事"
 - **handler** = 一个工人，专门处理某一类纸条
 - **post** = 把纸条塞进传达室门口的筐（队列）里
-- **主循环（mote_loop）** = 传达室大爷，不断从筐里拿纸条、看编号、喊对应工人来干；
+- **主循环（star_loop）** = 传达室大爷，不断从筐里拿纸条、看编号、喊对应工人来干；
   筐空了、闹钟也没到点，他就眯一会儿（wfi 睡觉，tickless 模式下还会把
   闹钟拨到最近一次"到点时刻"再睡）
 
@@ -115,7 +115,7 @@ MoteOS 是给**单片机**用的。单片机（也写作 MCU）就是一块比�
                     大爷继续拿下一张纸条（循环往复）
 ```
 
-写 MoteOS 程序 = **只做三件事**：
+写 StardustOS 程序 = **只做三件事**：
 
 1. 定义"纸条有哪些种类"（事件 ID 枚举）
 2. 定义"每类纸条谁来处理"（handler + 注册表）
@@ -128,7 +128,7 @@ MoteOS 是给**单片机**用的。单片机（也写作 MCU）就是一块比�
 先看完整代码，看不懂没关系，紧接着有逐行白话讲解：
 
 ```c
-#include "mote.h"          /* 包含内核头文件。头文件 = 说明书目录（见术语表 0.4）。
+#include "star.h"          /* 包含内核头文件。头文件 = 说明书目录（见术语表 0.4）。
                             * include = 把这份目录抄进来，编译器才知道有这些函数 */
 
 enum { EVT_LED = 0 };      /* enum 枚举：给纸条种类起名字。
@@ -136,8 +136,8 @@ enum { EVT_LED = 0 };      /* enum 枚举：给纸条种类起名字。
                             * 编号必须从 0 连续编（为什么：见第 7 章铁律 4）。
                             * EVT 是 Event 的缩写，前缀统一好辨认 */
 
-static mote_timer_t led_timer;  /* 定义一个"闹钟"变量。
-                                 * mote_timer_t：_t 结尾 = 类型名（见术语表）。
+static star_timer_t led_timer;  /* 定义一个"闹钟"变量。
+                                 * star_timer_t：_t 结尾 = 类型名（见术语表）。
                                  * static：让这个变量永久存在（函数返回也不消失）。
                                  * 闹钟要一直活到"响"，所以必须 static 或全局。
                                  * 如果写在函数里且不加 static，函数一返回闹钟就废了 */
@@ -151,12 +151,12 @@ static void led_handler(uint16_t evt, void *param, void *ctx)
     GPIOB->ODR ^= (1u << 0);         /* 干活的代码：翻转 PB0 引脚的灯 */
 }
 
-static const mote_evt_entry_t table[] = {
+static const star_evt_entry_t table[] = {
     /* 值班表（注册表）！一个数组，每一项 = "几号纸条 → 找谁"。
      * const：这张表运行时永远不变，编译器把它放进 Flash（长期记忆），不占 RAM。
      * [EVT_LED] = ... ：只填第 0 格，其他格子自动为"空" */
-    [EVT_LED] = MOTE_ENTRY(led_handler, NULL),
-    /* MOTE_ENTRY(handler, ctx)：打包成表项。
+    [EVT_LED] = STAR_ENTRY(led_handler, NULL),
+    /* STAR_ENTRY(handler, ctx)：打包成表项。
      * 第一个参数 = 找谁（led_handler）；
      * 第二个参数 = 工作台（ctx），这里不需要，填 NULL（空指针="没有"） */
 };
@@ -169,27 +169,27 @@ int main(void)
      * 两次按门铃之间数多少个心跳（时钟周期），不是频率。
      * 72MHz 芯片：1ms 有 72000 个心跳，SystemCoreClock/1000 = 72000 → 正好 1ms */
 
-    mote_init(table, 1);
+    star_init(table, 1);
     /* 把值班表交给内核。第二个参数 = 表有几项 = 最大编号+1。
      * 我们只有 0 号纸条，所以是 1 */
 
-    mote_timer_start(&led_timer,   /* 开闹钟。& = 取地址：把闹钟变量的位置告诉内核 */
+    star_timer_start(&led_timer,   /* 开闹钟。& = 取地址：把闹钟变量的位置告诉内核 */
                      EVT_LED,      /* 闹钟响了，投 0 号纸条 */
                      NULL,         /* 纸条上不粘东西 */
                      500,          /* 500ms 响一次 */
                      true);        /* true = 循环闹钟（响完自动定下一次） */
-    mote_loop();                   /* 内核主循环开始运行，永不返回 */
+    star_loop();                   /* 内核主循环开始运行，永不返回 */
     /* 此后的世界：闹钟响 → 自动投 EVT_LED 纸条 → 大爷拿纸条 → 查表 → 喊 led_handler → 灯翻转 */
 }
 ```
 
 **逐行白话版**（跟上面的注释是一一对应的）：
 
-1. `#include "mote.h"`：把内核的"说明书目录"抄进来。就像开饭馆前先看一眼
+1. `#include "star.h"`：把内核的"说明书目录"抄进来。就像开饭馆前先看一眼
    供货商目录，知道有哪些食材（函数）可以点。
 2. `enum { EVT_LED = 0 }`：给第 0 种纸条起名叫 `EVT_LED`（灯该翻转了）。
    编号必须从 0 开始连续排，原因见第 7 章铁律 4。
-3. `static mote_timer_t led_timer`：买一个闹钟，放在永远不会被收走的地方。
+3. `static star_timer_t led_timer`：买一个闹钟，放在永远不会被收走的地方。
    `static` 保证这个闹钟活到响为止（如果放在函数里又不加 `static`，
    函数一返回闹钟就被当废品收走了，永远响不了）。
 4. `led_handler`：定义工人。他要干的活就一行——把灯的开关拨一下（灯亮变暗、
@@ -198,10 +198,10 @@ int main(void)
    这张表用 `const` 修饰，被放进 Flash（长期记忆），不占 RAM（短期记忆）。
 6. `SysTick_Config(...)`：给芯片的自动报时器上发条，让它每 1 毫秒按一次门铃
    （这是"tick 节拍"的来源，具体接法见《移植教程》）。
-7. `mote_init(table, 1)`：把值班表交给内核（传达室大爷）。
-8. `mote_timer_start(...)`：设定闹钟——每 500 毫秒响一次，响了就往筐里投一张
+7. `star_init(table, 1)`：把值班表交给内核（传达室大爷）。
+8. `star_timer_start(...)`：设定闹钟——每 500 毫秒响一次，响了就往筐里投一张
    0 号纸条。
-9. `mote_loop()`：大爷开始上班，主循环开始。从这一刻起，程序进入"纸条驱动"
+9. `star_loop()`：大爷开始上班，主循环开始。从这一刻起，程序进入"纸条驱动"
    的世界，再也不用你操心调度。
 
 **程序跑起来后发生了什么？**（跟着走一遍就全懂了）
@@ -224,26 +224,26 @@ int main(void)
 （delayed）。先想清楚"纸条代表的是'发生次数'还是'当前状态'"，再选寄法，
 这一章就通了。
 
-### 2.1 普通投递 mote_event_post
+### 2.1 普通投递 star_event_post
 
 最常用的寄法：把一张纸条塞进筐里排队。
 
 ```c
-mote_status_t r = mote_event_post(EVT_LED, NULL);
-/* mote_status_t = 内核的"返回状态"类型，用来告诉你结果 */
+star_status_t r = star_event_post(EVT_LED, NULL);
+/* star_status_t = 内核的"返回状态"类型，用来告诉你结果 */
 ```
 
 - 谁都能递：**中断里、handler 里、main 里**都行
-- 返回值必须看一眼，就像寄快递要看回执：`MOTE_OK` = 递进去了；
-  `MOTE_ERR_FULL` = 筐满了（默认 16 张纸条全没处理完）。满的时候你自己决定：
-  重试、丢弃、还是调大 `MOTE_EVT_QUEUE_SIZE`
+- 返回值必须看一眼，就像寄快递要看回执：`STAR_OK` = 递进去了；
+  `STAR_ERR_FULL` = 筐满了（默认 16 张纸条全没处理完）。满的时候你自己决定：
+  重试、丢弃、还是调大 `STAR_EVT_QUEUE_SIZE`
 
-### 2.2 覆盖投递 mote_event_post_replace
+### 2.2 覆盖投递 star_event_post_replace
 
 场景：按键手抖，中断风暴一口气递了 20 张"按键按下"纸条——筐爆了。
 
 ```c
-mote_event_post_replace(EVT_KEY, NULL);
+star_event_post_replace(EVT_KEY, NULL);
 ```
 
 效果：筐里如果已有 EVT_KEY 纸条，**只更新最新那张，不再新增**。
@@ -252,33 +252,33 @@ mote_event_post_replace(EVT_KEY, NULL);
 **什么时候用**：事件代表"当前状态"而不是"发生次数"时——按键、ADC 当前值、
 界面刷新。这类事件一律用 replace。
 
-### 2.3 延时投递 mote_event_post_delayed
+### 2.3 延时投递 star_event_post_delayed
 
 就像给未来的自己寄一张定时明信片："请 100ms 后把这张纸条放进筐。"
 
 ```c
-mote_event_post_delayed(EVT_LED, NULL, 100);   /* 100ms 后再把纸条放进筐 */
+star_event_post_delayed(EVT_LED, NULL, 100);   /* 100ms 后再把纸条放进筐 */
 ```
 
-适合"延迟关屏""开机 3 秒后自检"。同时最多 `MOTE_DELAYED_MAX`（默认 4）张在路上，
-超了返回 `MOTE_ERR_FULL`。
-`ms` 传 0 或 ≥2^31（约 24.8 天）返回 `MOTE_ERR_PARAM`（与定时器同口径的运行时校验）。
+适合"延迟关屏""开机 3 秒后自检"。同时最多 `STAR_DELAYED_MAX`（默认 4）张在路上，
+超了返回 `STAR_ERR_FULL`。
+`ms` 传 0 或 ≥2^31（约 24.8 天）返回 `STAR_ERR_PARAM`（与定时器同口径的运行时校验）。
 
 两个配套 API（第 2 章新增）：
 
 ```c
 /* 覆盖版：同一 EVT 只留最新一张在路上（重复调用不占新格子） */
-mote_event_post_delayed_replace(EVT_LED, NULL, 100);
+star_event_post_delayed_replace(EVT_LED, NULL, 100);
 
-/* 取消：把还在路上的延时纸条收回来。返回 MOTE_ERR_NOT_FOUND = 没找到
+/* 取消：把还在路上的延时纸条收回来。返回 STAR_ERR_NOT_FOUND = 没找到
  * （可能已经投递出去了，也可能 evt/param 对不上） */
-mote_event_cancel_delayed(EVT_LED, NULL);
+star_event_cancel_delayed(EVT_LED, NULL);
 ```
 
 典型用途：按键按下 3 秒后休眠；3 秒内再次按键就把旧的 cancel 掉再 post
 一张新的（或用 replace 版直接覆盖）。
 
-### 2.4 纸条上带东西：MOTE_P / MOTE_U32
+### 2.4 纸条上带东西：STAR_P / STAR_U32
 
 纸条的 param 是个 `void *`（万能指针），能粘一个数值或指向数据。
 把它想成纸条上缝的"小口袋"：可以塞一张写着数字的便签，也可以塞一张
@@ -287,18 +287,18 @@ mote_event_cancel_delayed(EVT_LED, NULL);
 ```c
 uint32_t adc_val;                    /* 全局变量：永远存在，可以粘 */
 /* 中断里：把数值刻在纸条上（≤32 位都能刻） */
-mote_event_post(EVT_ADC, MOTE_P(adc_val));
-/* MOTE_P(值) = 把数值伪装成指针塞进纸条。P = Param 的缩写 */
+star_event_post(EVT_ADC, STAR_P(adc_val));
+/* STAR_P(值) = 把数值伪装成指针塞进纸条。P = Param 的缩写 */
 
 /* handler 里：把数值取回来 */
 static void adc_handler(uint16_t evt, void *param, void *ctx)
 {
-    uint32_t v = MOTE_U32(param);    /* 把纸条上的指针还原成 32 位数值 */
+    uint32_t v = STAR_U32(param);    /* 把纸条上的指针还原成 32 位数值 */
     if (v > 3000) { /* 电压超了 */ }
 }
 ```
 
-`MOTE_P(值)` 就像把数字写在便签上再塞进口袋；`MOTE_U32(param)` 是把便签
+`STAR_P(值)` 就像把数字写在便签上再塞进口袋；`STAR_U32(param)` 是把便签
 拿出来读数字。一来一回，数值就跟着纸条"旅行"了一趟。
 
 **为什么不能粘栈变量？** 看反面教材：
@@ -307,7 +307,7 @@ static void adc_handler(uint16_t evt, void *param, void *ctx)
 void some_function(void)
 {
     uint8_t data[4] = {1,2,3,4};     /* data 是局部变量，住在"栈"上 */
-    mote_event_post(EVT_RX, data);   /* 把 data 的地址粘到纸条上 */
+    star_event_post(EVT_RX, data);   /* 把 data 的地址粘到纸条上 */
 }   /* ← 函数返回，栈上这块内存立刻被回收、被别的东西占用 */
 
 /* 等大爷喊工人处理纸条时，data 地址指向的内容已经变成垃圾 → 程序莫名抽风 */
@@ -317,7 +317,7 @@ void some_function(void)
 函数一返回，草稿纸就被收走、给别的函数接着用。你把草稿纸的门牌号塞进纸条，
 等工人按门牌号找过去，纸上的字早就不是你的了。
 
-规则就一句话：**粘全局/静态变量（永远在），或粘 MOTE_P(数值)（刻在纸条上）。大块数据走第 4 章邮箱。**
+规则就一句话：**粘全局/静态变量（永远在），或粘 STAR_P(数值)（刻在纸条上）。大块数据走第 4 章邮箱。**
 
 ### 2.5 返回值的四种"回执"（新增小节）
 
@@ -325,10 +325,10 @@ void some_function(void)
 
 | 返回值 | 生活比喻 | 常见场景 |
 |---|---|---|
-| `MOTE_OK` | 顺利签收 | post 递进筐、mail send 入柜、闹钟设定成功 |
-| `MOTE_ERR_FULL` | 地方满了，装不下 | 筐满、延时槽满、柜子格满、任务槽满 |
-| `MOTE_ERR_PARAM` | 你给的要求不合理，被当场退回 | 时长传 0 或 ≥2^31、超格长度、非法的策略值 |
-| `MOTE_ERR_NOT_FOUND` | 没找到你要找的东西 | 取消延时纸条时，纸条已经寄出 / 编号对不上 |
+| `STAR_OK` | 顺利签收 | post 递进筐、mail send 入柜、闹钟设定成功 |
+| `STAR_ERR_FULL` | 地方满了，装不下 | 筐满、延时槽满、柜子格满、任务槽满 |
+| `STAR_ERR_PARAM` | 你给的要求不合理，被当场退回 | 时长传 0 或 ≥2^31、超格长度、非法的策略值 |
+| `STAR_ERR_NOT_FOUND` | 没找到你要找的东西 | 取消延时纸条时，纸条已经寄出 / 编号对不上 |
 
 ---
 
@@ -341,9 +341,9 @@ void some_function(void)
 ### 3.1 单次闹钟（响一次就扔）
 
 ```c
-static mote_timer_t t;                    /* 闹钟变量必须 static 或全局 */
+static star_timer_t t;                    /* 闹钟变量必须 static 或全局 */
 
-mote_timer_start(&t, EVT_XXX, NULL, 1000, false);
+star_timer_start(&t, EVT_XXX, NULL, 1000, false);
 /* 参数顺序：闹钟变量 → 响了投几号纸条 → 纸条上粘什么 → 多少 ms 响 → 是否循环 */
 /* false = 只响一次 */
 ```
@@ -352,14 +352,14 @@ mote_timer_start(&t, EVT_XXX, NULL, 1000, false);
 
 1. `&t`：告诉内核"用这个闹钟"。`&` 是取地址（把闹钟放哪儿告诉人家）
 2. `EVT_XXX`：闹钟响了，往筐里投几号纸条
-3. `NULL`：纸条上不粘东西（需要粘数值就写 `MOTE_P(x)`，见 2.4）
+3. `NULL`：纸条上不粘东西（需要粘数值就写 `STAR_P(x)`，见 2.4）
 4. `1000`：1000 毫秒（1 秒）后响
 5. `false`：只响这一次，响完闹钟自己作废
 
 ### 3.2 循环闹钟（一直响）
 
 ```c
-mote_timer_start(&t, EVT_XXX, NULL, 50, true);       /* 每 50ms 响一次 */
+star_timer_start(&t, EVT_XXX, NULL, 50, true);       /* 每 50ms 响一次 */
 ```
 
 最后一位换成 `true`，闹钟就变成"循环闹钟"：响完自动定下一次，永远不退休。
@@ -368,8 +368,8 @@ mote_timer_start(&t, EVT_XXX, NULL, 50, true);       /* 每 50ms 响一次 */
 ### 3.3 关掉 / 改时间
 
 ```c
-mote_timer_stop(&t);               /* 关掉。没开过也安全，不会出错 */
-mote_timer_restart(&t, 2000);      /* 把时间改成 2 秒后响。前提：它当前是开着的 */
+star_timer_stop(&t);               /* 关掉。没开过也安全，不会出错 */
+star_timer_restart(&t, 2000);      /* 把时间改成 2 秒后响。前提：它当前是开着的 */
 ```
 
 ### 3.4 五个要注意的点
@@ -378,7 +378,7 @@ mote_timer_restart(&t, 2000);      /* 把时间改成 2 秒后响。前提：它
 2. **handler 里可以随意开/关闹钟**——这是把"长流程拆成多步"的官方姿势（见 7.1）
 3. **中断里不能碰定时器**——定时器 API 只能在主循环上下文用（铁律 3）
 4. **时长上限约 24.8 天**（2^31-1 ms，回绕比较的数学边界），超出直接返回
-   `MOTE_ERR_PARAM`（运行时校验，不依赖可关闭的断言）；更长的间隔用
+   `STAR_ERR_PARAM`（运行时校验，不依赖可关闭的断言）；更长的间隔用
    "周期闹钟 + 计数"自己累积。
    说说"回绕"是怎么回事：内核用 32 位计数器记时间，像摩托车的里程表，
    满格了就会转回 0 重新数。内核比较"谁先到点"用的是对回绕安全的比较方法，
@@ -386,7 +386,7 @@ mote_timer_restart(&t, 2000);      /* 把时间改成 2 秒后响。前提：它
    2^31-1 毫秒（约 24.8 天），这是刻意的安全边界
 5. **闹钟内部按到期时刻排队**：内核把闹钟按"什么时候响"排序，
    没到点的闹钟每次 poll 只需看一眼队头（O(1)），闹钟多了也不拖慢主循环；
-   `mote_timer_restart` 改时间后会自动重新排队
+   `star_timer_restart` 改时间后会自动重新排队
 
 ### 3.5 队列满时的三种策略（重要）
 
@@ -397,20 +397,20 @@ mote_timer_restart(&t, 2000);      /* 把时间改成 2 秒后响。前提：它
 - **RETRY**：塞不进去就捏在手里，下一拍再塞。适合"迟到没关系"的通知（灯闪烁）
 - **LATEST**：同编号的纸条只留最新一张。适合"只关心最新状态"的通知（ADC 值）
 
-用 `mote_timer_start_ex` 指定策略（末尾多一个参数）：
+用 `star_timer_start_ex` 指定策略（末尾多一个参数）：
 
 ```c
 /* 策略一 DROP（严格截止）：到期即投，失败即弃并释放定时器。
  * 适合超时检测——事件要么准时出现，要么永不出现 */
-mote_timer_start_ex(&t, EVT_TMO, NULL, 100, false, MOTE_TIMER_POLICY_DROP);
+star_timer_start_ex(&t, EVT_TMO, NULL, 100, false, STAR_TIMER_POLICY_DROP);
 
 /* 策略二 RETRY（默认）：单次定时器满队重试，事件"至少一次"送达但可能迟到。
  * 适合 LED 闪烁这类迟到无所谓的场景 */
-mote_timer_start_ex(&t, EVT_LED, NULL, 500, false, MOTE_TIMER_POLICY_RETRY);
+star_timer_start_ex(&t, EVT_LED, NULL, 500, false, STAR_TIMER_POLICY_RETRY);
 
 /* 策略三 LATEST：replace 语义，队列里同 ID 只留最新一份。
  * 适合状态类事件（ADC 值、位置更新），天然防堆积 */
-mote_timer_start_ex(&t, EVT_ADC, NULL, 20, true, MOTE_TIMER_POLICY_LATEST);
+star_timer_start_ex(&t, EVT_ADC, NULL, 20, true, STAR_TIMER_POLICY_LATEST);
 ```
 
 **选型速查**：
@@ -421,11 +421,11 @@ mote_timer_start_ex(&t, EVT_ADC, NULL, 20, true, MOTE_TIMER_POLICY_LATEST);
 | 迟到无所谓（闪烁、心跳） | RETRY（默认） |
 | 状态类、只关心最新值 | LATEST |
 
-默认的 `mote_timer_start` = RETRY（单次）/ DROP（周期，满队丢当次并计入 `mote_dropped_count()`）。
+默认的 `star_timer_start` = RETRY（单次）/ DROP（周期，满队丢当次并计入 `star_dropped_count()`）。
 RETRY 满队时定时器不释放，**下一拍**自动重试（所以是"至少一次"，最坏晚一拍）；
-**重试的失败只是"暂缓"，不计入 `mote_dropped_count()` 也不触发丢事件钩子**——
+**重试的失败只是"暂缓"，不计入 `star_dropped_count()` 也不触发丢事件钩子**——
 事件最终会送达，不是丢弃（周期定时器满队丢当次才是真丢弃，照常计数）。
-policy 传越界值返回 `MOTE_ERR_PARAM`（运行时校验）。
+policy 传越界值返回 `STAR_ERR_PARAM`（运行时校验）。
 
 RETRY 的"暂缓"长这样（每格 = 1 拍）：
 
@@ -435,7 +435,7 @@ RETRY 的"暂缓"长这样（每格 = 1 拍）：
      └── 某拍筐有空位 ──▶ 塞进去了 → 最终送达，绝不会凭空消失
 ```
 
-只有周期定时器"满队丢当次"才是真正的丢弃，才会在 `mote_dropped_count()`
+只有周期定时器"满队丢当次"才是真正的丢弃，才会在 `star_dropped_count()`
 里 +1（监控丢了多少事件的办法见第 8 章排查表）。
 
 ### 3.6 循环闹钟的相位稳定（重要）
@@ -446,7 +446,7 @@ RETRY 的"暂缓"长这样（每格 = 1 拍）：
 - handler 或主循环忙了 3ms（周期 10ms）：下一次仍在 20/30/40ms 触发，
   不会漂移到 23/33/43ms——延迟不会逐周期累积
 - 一口气错过好几拍：只补投一张纸条（合并），相位照旧
-- 极端落后（超过 `MOTE_TIMER_CATCHUP_MAX`，默认 1000 拍）：放弃旧相位、
+- 极端落后（超过 `STAR_TIMER_CATCHUP_MAX`，默认 1000 拍）：放弃旧相位、
   从当前时刻重新对齐（防御性，防止推进循环过长）
 
 画成时间轴（理想拍点每 10ms 一格）：
@@ -475,7 +475,7 @@ RETRY 的"暂缓"长这样（每格 = 1 拍）：
 数据是"复印"进去的，所以原数据之后怎么变都不影响柜子里的副本。
 
 ```c
-MOTE_MAILBOX_DEF(uart_mb,      /* 柜子名字，随便起（宏会帮你生成对应变量） */
+STAR_MAILBOX_DEF(uart_mb,      /* 柜子名字，随便起（宏会帮你生成对应变量） */
                  EVT_UART,     /* 有货到柜时，投几号纸条（取件通知） */
                  32,           /* 柜子有几个格子 */
                  1);           /* 每个格子多大（字节）：串口逐字节收发 → 1 字节一格 */
@@ -486,12 +486,12 @@ MOTE_MAILBOX_DEF(uart_mb,      /* 柜子名字，随便起（宏会帮你生成�
 1. `uart_mb`：给柜子起的名字。这个宏会帮你变出一个真正的柜子变量
 2. `EVT_UART`：每当有货进柜，自动往筐里投这张"取件通知"纸条，
    告诉工人"快递到了，来取"
-3. `32`：柜子一共 32 个格子（格子全满就塞不进了，会返回 `MOTE_ERR_FULL`）
+3. `32`：柜子一共 32 个格子（格子全满就塞不进了，会返回 `STAR_ERR_FULL`）
 4. `1`：每个格子能装 1 字节（1 个字节 ≈ 装一个字符的量），串口逐字节收发正好
 
-> **长度契约**：每格最大 `item_size` 字节（1..255，`MOTE_MAILBOX_DEF` 编译期
-> 强制），`mote_mail_send` 的 `len` 必须 1..item_size（超长或 0 返回
-> `MOTE_ERR_PARAM`，不再静默截断）；`mote_mail_recv` 返回**实际存入的字节数**。
+> **长度契约**：每格最大 `item_size` 字节（1..255，`STAR_MAILBOX_DEF` 编译期
+> 强制），`star_mail_send` 的 `len` 必须 1..item_size（超长或 0 返回
+> `STAR_ERR_PARAM`，不再静默截断）；`star_mail_recv` 返回**实际存入的字节数**。
 > 每格额外花 1 字节 RAM 记录长度。
 
 ### 4.1 经典用法：中断放货，handler 取货
@@ -504,7 +504,7 @@ MOTE_MAILBOX_DEF(uart_mb,      /* 柜子名字，随便起（宏会帮你生成�
 void USART1_IRQHandler(void)
 {
     uint8_t c = (uint8_t)USART1->DR;   /* 读串口寄存器，截成 8 位存进 c */
-    mote_mail_send(&uart_mb, &c, 1);
+    star_mail_send(&uart_mb, &c, 1);
     /* 三个参数：柜子 → 货物的地址（&c = c 的位置）→ 复印多少字节 */
 }
 
@@ -512,10 +512,10 @@ void USART1_IRQHandler(void)
 static void uart_handler(uint16_t evt, void *param, void *ctx)
 {
     /* 纸条的 param 就是"哪个柜子来货了"（内核自动粘上的柜子指针） */
-    mote_mail_t *mb = (mote_mail_t *)param;   /* 把万能指针还原成"柜子类型"指针 */
+    star_mail_t *mb = (star_mail_t *)param;   /* 把万能指针还原成"柜子类型"指针 */
     uint8_t c;
 
-    while (mote_mail_recv(mb, &c) > 0) {   /* 取一格；空柜返回 -1 */
+    while (star_mail_recv(mb, &c) > 0) {   /* 取一格；空柜返回 -1 */
         /* 处理 c，直到把所有格子清空 */
     }
 }
@@ -524,10 +524,10 @@ static void uart_handler(uint16_t evt, void *param, void *ctx)
 逐段白话：
 
 - **中断里的活**：串口收到一个字节（门铃响了），把字节装进 `c`，
-  `mote_mail_send` 把它**复印**一份塞进柜子，同时自动往筐里投一张
+  `star_mail_send` 把它**复印**一份塞进柜子，同时自动往筐里投一张
   `EVT_UART` 纸条（取件通知）。放完货马上回去，开门动作极短。
 - **工人（handler）的活**：收到纸条后，从纸条的小口袋里掏出柜子的门牌号
-  （`param` 里就是哪个柜子来货了），然后一个劲儿地 `mote_mail_recv` 取货，
+  （`param` 里就是哪个柜子来货了），然后一个劲儿地 `star_mail_recv` 取货，
   每取一格处理一格，直到柜子空了（返回 -1 = 空柜）。
 - 收货和投递都发生在**挂"请勿打扰"牌子的时间段（临界区）**里一口气完成，
   不会做一半被人打断（原子 = 要么全做完，要么全没做）。
@@ -543,15 +543,15 @@ static void uart_handler(uint16_t evt, void *param, void *ctx)
 
 逐字节方案格子多但每格小，按你的 RAM 余量和延迟预算选。
 
-`mote_mail_send` 返回 `MOTE_ERR_FULL` = 格子全满 = 配置小了，调大或降波特率；
-返回 `MOTE_ERR_PARAM` = `len` 超格或为 0，检查发送长度。
+`star_mail_send` 返回 `STAR_ERR_FULL` = 格子全满 = 配置小了，调大或降波特率；
+返回 `STAR_ERR_PARAM` = `len` 超格或为 0，检查发送长度。
 
 ### 4.3 注意
 
-- 发送长度必须 1..格子大小：超长**直接拒绝**（返回 `MOTE_ERR_PARAM`），不再静默截断
-- `mote_mail_recv` 返回实际存入的字节数（1..格子大小），空柜返回 -1——不会回吐整格残留
+- 发送长度必须 1..格子大小：超长**直接拒绝**（返回 `STAR_ERR_PARAM`），不再静默截断
+- `star_mail_recv` 返回实际存入的字节数（1..格子大小），空柜返回 -1——不会回吐整格残留
 - 一个 handler 可以管多个柜子：靠 `param` 区分是哪个柜子来的
-- 柜子字段被写坏/非法构造时，`mote_mail_recv` 同样返回 -1（运行时拒绝，
+- 柜子字段被写坏/非法构造时，`star_mail_recv` 同样返回 -1（运行时拒绝，
   不让来路不明的柜子参与流转）；**每格的长度域（lens）被写坏为 0 或
   超过格子大小时同样返回 -1**，不会按垃圾长度去越界读
 
@@ -562,7 +562,7 @@ static void uart_handler(uint16_t evt, void *param, void *ctx)
 （挂"请勿打扰"牌子的时间段）里一口气做完：
 
 ```
-mote_mail_send(&mb, &c, 1) 开始
+star_mail_send(&mb, &c, 1) 开始
   │
   ├─ 挂上"请勿打扰"牌子（进临界区，门铃暂停）
   │
@@ -607,10 +607,10 @@ static void key_scan(uint16_t evt, void *param, void *ctx)
     /* 每 10ms 自动被叫来一次：读按键、消抖、发 EVT_KEY 纸条 */
 }
 
-static const mote_task_desc_t tasks[] = {
+static const star_task_desc_t tasks[] = {
     /* 任务名单（描述符表）：放 Flash，占的 RAM 可忽略 */
-    MOTE_TASK_DEF(10, key_scan, NULL),
-    /* MOTE_TASK_DEF(周期ms, handler, ctx)：
+    STAR_TASK_DEF(10, key_scan, NULL),
+    /* STAR_TASK_DEF(周期ms, handler, ctx)：
      *   周期ms  = 多久叫一次
      *   handler = 叫谁
      *   ctx     = 交给他自带的"工作台"（原样传给 handler 第三个参数），不用就 NULL */
@@ -618,25 +618,25 @@ static const mote_task_desc_t tasks[] = {
 
 int main(void)
 {
-    /* 在 mote_init 之后 */
-    mote_task_init(tasks, 1);   /* 把名单交给内核。1 = 名单上有 1 个任务 */
-    mote_task_start(0);         /* 0 号任务打卡上班（按名单上的顺序编号） */
+    /* 在 star_init 之后 */
+    star_task_init(tasks, 1);   /* 把名单交给内核。1 = 名单上有 1 个任务 */
+    star_task_start(0);         /* 0 号任务打卡上班（按名单上的顺序编号） */
     /* 不 start 的任务 = 不占 RAM（名单在 Flash 里） */
-    /* 想停：mote_task_stop(0); */
+    /* 想停：star_task_stop(0); */
 }
 ```
 
-白话解读：打卡机 = 一排固定轮班的岗位。`MOTE_TASK_DEF(10, key_scan, NULL)`
+白话解读：打卡机 = 一排固定轮班的岗位。`STAR_TASK_DEF(10, key_scan, NULL)`
 的意思是"每 10 毫秒，喊 key_scan 来干一次活"。和闹钟最大的不同：
 闹钟是"响了 → 塞纸条 → 工人被纸条叫来"（绕了传达室一圈），打卡机是
 "到点直接喊人"（不走纸条筐）。
 
-**槽位池**：`MOTE_TASK_SLOT_MAX`（默认 4）= 同时上班的任务上限。
-名单可以写 20 个任务，但同时只能有 4 个在打卡（第 5 个 `mote_task_start` 返回 `MOTE_ERR_FULL`）。
-停掉一个就能再开一个。任务 handler 收到的 evt 固定是 `MOTE_EVT_TASK`（内核专用编号）。
+**槽位池**：`STAR_TASK_SLOT_MAX`（默认 4）= 同时上班的任务上限。
+名单可以写 20 个任务，但同时只能有 4 个在打卡（第 5 个 `star_task_start` 返回 `STAR_ERR_FULL`）。
+停掉一个就能再开一个。任务 handler 收到的 evt 固定是 `STAR_EVT_TASK`（内核专用编号）。
 
 **周期校验**：描述符 `period_ms` 为 0 或 ≥2^31（约 24.8 天）的任务无法启动，
-`mote_task_start` 返回 `MOTE_ERR_PARAM`（运行时校验，与定时器同口径）。
+`star_task_start` 返回 `STAR_ERR_PARAM`（运行时校验，与定时器同口径）。
 0 周期会退化成"每 poll 直接喊一次 handler"，等同忙循环，别想钻空子。
 
 ---
@@ -646,7 +646,7 @@ int main(void)
 需求：光线暗时 LED 渐亮渐暗（呼吸）；按键切换模式；串口可查询状态。
 
 ```c
-#include "mote.h"
+#include "star.h"
 
 /* 1. 纸条种类：连续编号，从 0 开始 */
 enum {
@@ -660,13 +660,13 @@ static uint32_t g_brightness;      /* 当前亮度 0~100 */
 static bool g_breath_on;           /* 呼吸模式开关 */
 
 /* 3. 柜子与闹钟（长度契约见第 4 章：len 必须 ≤ item_size） */
-MOTE_MAILBOX_DEF(uart_mb, EVT_QUERY, 32, 1);
-static mote_timer_t breath_timer;
+STAR_MAILBOX_DEF(uart_mb, EVT_QUERY, 32, 1);
+static star_timer_t breath_timer;
 
 /* 4. 工人：各管一摊 */
 static void adc_handler(uint16_t evt, void *param, void *ctx)
 {
-    uint32_t v = MOTE_U32(param);
+    uint32_t v = STAR_U32(param);
     if (v < 500) {                        /* 光线暗 */
         g_breath_on = true;               /* 开呼吸 */
     }
@@ -696,46 +696,46 @@ static void breath_step(uint16_t evt, void *param, void *ctx)
 }
 
 /* 5. 值班表 + 名单 */
-static const mote_evt_entry_t table[] = {
-    [EVT_ADC]   = MOTE_ENTRY(adc_handler, NULL),
-    [EVT_KEY]   = MOTE_ENTRY(key_handler, NULL),
-    [EVT_QUERY] = MOTE_ENTRY(query_handler, NULL),
+static const star_evt_entry_t table[] = {
+    [EVT_ADC]   = STAR_ENTRY(adc_handler, NULL),
+    [EVT_KEY]   = STAR_ENTRY(key_handler, NULL),
+    [EVT_QUERY] = STAR_ENTRY(query_handler, NULL),
 };
 
-static const mote_task_desc_t tasks[] = {
-    MOTE_TASK_DEF(20, breath_step, NULL),
+static const star_task_desc_t tasks[] = {
+    STAR_TASK_DEF(20, breath_step, NULL),
 };
 
 int main(void)
 {
     SysTick_Config(SystemCoreClock / 1000);   /* 参数 = 1ms 内的时钟周期数（见 1.2） */
-    mote_init(table, sizeof(table) / sizeof(table[0]));
+    star_init(table, sizeof(table) / sizeof(table[0]));
     /* sizeof(table)/sizeof(table[0]) = 表有几项：总字节数 ÷ 每项字节数。
      * 用这个写法，以后加纸条不用改这个数字 */
 
-    mote_task_init(tasks, 1);
+    star_task_init(tasks, 1);
 
-    mote_task_start(0);                  /* 呼吸任务上班 */
-    mote_timer_start(&breath_timer, EVT_ADC, NULL, 100, true); /* 每 100ms 采一次光 */
+    star_task_start(0);                  /* 呼吸任务上班 */
+    star_timer_start(&breath_timer, EVT_ADC, NULL, 100, true); /* 每 100ms 采一次光 */
 
-    mote_loop();
+    star_loop();
 }
 
 /* 6. 中断们：只负责递纸条，绝不多干 */
 void ADC_IRQHandler(void)
 {
-    mote_event_post(EVT_ADC, MOTE_P(adc_result));   /* 采样完成，把数值刻在纸条上 */
+    star_event_post(EVT_ADC, STAR_P(adc_result));   /* 采样完成，把数值刻在纸条上 */
 }
 
 void KEY_IRQHandler(void)
 {
-    mote_event_post_replace(EVT_KEY, NULL);         /* 防抖：纸条只留一张 */
+    star_event_post_replace(EVT_KEY, NULL);         /* 防抖：纸条只留一张 */
 }
 
 void USART1_IRQHandler(void)
 {
     uint8_t c = USART1->DR;
-    mote_mail_send(&uart_mb, &c, 1);                /* 放货 */
+    star_mail_send(&uart_mb, &c, 1);                /* 放货 */
 }
 ```
 
@@ -760,7 +760,7 @@ void USART1_IRQHandler(void)
 
 ## 第 7 章：四条铁律（违反的后果都演示给你看）
 
-MoteOS 运转良好全靠这四条规矩。它们不是可选项——踩了任何一条，程序都会
+StardustOS 运转良好全靠这四条规矩。它们不是可选项——踩了任何一条，程序都会
 "看似能跑，偶尔抽风"。
 
 ### 铁律 1：handler 必须毫秒级返回，绝不阻塞
@@ -784,7 +784,7 @@ static void bad_handler(uint16_t evt, void *param, void *ctx)
 static void step1(uint16_t evt, void *param, void *ctx)
 {
     start_something();                          /* 启动动作（不等待） */
-    mote_event_post_delayed(EVT_STEP2, NULL, 100);   /* 100ms 后再走下一步 */
+    star_event_post_delayed(EVT_STEP2, NULL, 100);   /* 100ms 后再走下一步 */
 }
 ```
 
@@ -794,28 +794,28 @@ static void step1(uint16_t evt, void *param, void *ctx)
 ### 铁律 2：纸条只粘永久变量或数值（反面教材见 2.4）
 
 纸条上粘的地址，必须指向"永远都在"的东西（全局变量、static 变量），
-或者干脆用 `MOTE_P(数值)` 把数字直接刻在纸条上。粘"草稿纸"（栈变量）
+或者干脆用 `STAR_P(数值)` 把数字直接刻在纸条上。粘"草稿纸"（栈变量）
 = 等工人找过去，纸已经被人改写了。
 
 ### 铁律 3：哪些 API 能在哪里调（背不下来就抄）
 
 | API | 中断里 | handler/主循环里 |
 |---|---|---|
-| `mote_event_post*`（含 `_delayed` / `_delayed_replace`） | 可以 | 可以 |
-| `mote_event_cancel_delayed` | 可以 | 可以 |
-| `mote_mail_send` | 可以 | 可以 |
-| `mote_tick` / `mote_tick_advance` | 可以（移植层专用） | 可以 |
-| `mote_next_due` | 可以 | 可以 |
-| `mote_ticks` / `mote_dropped_count` / `mote_set_drop_hook` | 可以（自带临界区） | 可以 |
-| `mote_timer_start/stop/restart` | 不行 | 可以 |
-| `mote_task_start/stop` | 不行 | 可以 |
-| `mote_mail_recv` | 不行 | 可以 |
+| `star_event_post*`（含 `_delayed` / `_delayed_replace`） | 可以 | 可以 |
+| `star_event_cancel_delayed` | 可以 | 可以 |
+| `star_mail_send` | 可以 | 可以 |
+| `star_tick` / `star_tick_advance` | 可以（移植层专用） | 可以 |
+| `star_next_due` | 可以 | 可以 |
+| `star_ticks` / `star_dropped_count` / `star_set_drop_hook` | 可以（自带临界区） | 可以 |
+| `star_timer_start/stop/restart` | 不行 | 可以 |
+| `star_task_start/stop` | 不行 | 可以 |
+| `star_mail_recv` | 不行 | 可以 |
 
 口诀：**开门（中断）时只许递纸条、放快递；闹钟、打卡机、取货，都回到传达室再干。**
 
-补一句：`mote_loop()` 是"大爷全自动上班"。如果你必须保留自己的 `while(1)`
-主循环，可以改用 `mote_poll()` 单步驱动内核（每次处理一件事），没事干时喊
-`mote_sleep()` 让它睡到下一件到点的事再醒——具体写法见《移植教程》。
+补一句：`star_loop()` 是"大爷全自动上班"。如果你必须保留自己的 `while(1)`
+主循环，可以改用 `star_poll()` 单步驱动内核（每次处理一件事），没事干时喊
+`star_sleep()` 让它睡到下一件到点的事再醒——具体写法见《移植教程》。
 
 ### 铁律 4：事件 ID 从 0 连续枚举
 
@@ -829,20 +829,20 @@ ID 就是值班表的下标，表按"最大 ID+1"占 Flash。ID 写成 200 号�
 
 | 症状 | 最可能的原因 | 查哪里 |
 |---|---|---|
-| LED 完全不闪 | tick 没接上 | `SysTick_Config` 调了没？`mote_port.c` 加工程没？ |
-| 事件递了没反应 | 值班表没登记 / ID 超界 | `[EVT_X] = MOTE_ENTRY(...)` 写了没？表大小传对没？ |
-| 任务（打卡机）不执行 | 没调 `mote_task_init` / `mote_task_start`，或 id 越界 | main 里两步都调了没？看 `mote_task_start` 返回值（`MOTE_ERR_PARAM` = id 越界或周期非法，`MOTE_ERR_FULL` = 槽位已满） |
-| 偶尔丢数据 | 队列/柜子小了 | `MOTE_EVT_QUEUE_SIZE`、邮箱槽数调大，注意返回值 |
-| 想监控丢了多少事件 | — | 读 `mote_dropped_count()`：因队列满/事件无效被**实际丢弃**的累计数（单次 RETRY 定时器的满队重试不计入——它最终会送达）。想知道"丢的是哪个事件"，用 `mote_set_drop_hook()` 注册回调（注意：钩子在关中断上下文运行，只允许事件/邮箱 API，禁止定时器/任务 API；钩子内再次触发的丢弃不会递归回调本钩子——防重入） |
+| LED 完全不闪 | tick 没接上 | `SysTick_Config` 调了没？`star_port.c` 加工程没？ |
+| 事件递了没反应 | 值班表没登记 / ID 超界 | `[EVT_X] = STAR_ENTRY(...)` 写了没？表大小传对没？ |
+| 任务（打卡机）不执行 | 没调 `star_task_init` / `star_task_start`，或 id 越界 | main 里两步都调了没？看 `star_task_start` 返回值（`STAR_ERR_PARAM` = id 越界或周期非法，`STAR_ERR_FULL` = 槽位已满） |
+| 偶尔丢数据 | 队列/柜子小了 | `STAR_EVT_QUEUE_SIZE`、邮箱槽数调大，注意返回值 |
+| 想监控丢了多少事件 | — | 读 `star_dropped_count()`：因队列满/事件无效被**实际丢弃**的累计数（单次 RETRY 定时器的满队重试不计入——它最终会送达）。想知道"丢的是哪个事件"，用 `star_set_drop_hook()` 注册回调（注意：钩子在关中断上下文运行，只允许事件/邮箱 API，禁止定时器/任务 API；钩子内再次触发的丢弃不会递归回调本钩子——防重入） |
 | 中断里改全局变量偶发抽风 | 中断和 handler 抢数据 | 数据只走纸条/柜子传，共享变量加临界区 |
-| 省不了电 | `mote_idle` 没生效 | 见移植教程 FAQ Q6 |
-| 系统周期性卡一下 | 某个 handler 太慢 | 用 `mote_ticks()` 在 handler 头尾打点计时 |
+| 省不了电 | `star_idle` 没生效 | 见移植教程 FAQ Q6 |
+| 系统周期性卡一下 | 某个 handler 太慢 | 用 `star_ticks()` 在 handler 头尾打点计时 |
 
-**看时间**：`uint32_t now = mote_ticks();` 返回系统节拍数（单位 `MOTE_TICK_MS`）。
-`mote_ticks()` 就是内核心里的"现在几点"——内核数着 tick 的响铃次数过日子，
+**看时间**：`uint32_t now = star_ticks();` 返回系统节拍数（单位 `STAR_TICK_MS`）。
+`star_ticks()` 就是内核心里的"现在几点"——内核数着 tick 的响铃次数过日子，
 问它一句就能知道过了多久。
 
-**在 PC 上先测逻辑**：MoteOS 内核可以在电脑上跑（`cmake --build build && ctest`），
+**在 PC 上先测逻辑**：StardustOS 内核可以在电脑上跑（`cmake --build build && ctest`），
 业务逻辑先在电脑上验证，再上板，事半功倍。
 
 ---
@@ -850,38 +850,38 @@ ID 就是值班表的下标，表按"最大 ID+1"占 Flash。ID 写成 200 号�
 ## 第 9 章：FAQ
 
 **Q1：handler 里能 sleep/延时吗？**
-没有这个 API。想要"过一会再干"→ `mote_event_post_delayed` 或定时器。
+没有这个 API。想要"过一会再干"→ `star_event_post_delayed` 或定时器。
 
 **Q2：一个 handler 能注册多个事件吗？**
-能。在值班表里多写几行 `[EVT_A] = MOTE_ENTRY(h, NULL), [EVT_B] = MOTE_ENTRY(h, NULL)`，
+能。在值班表里多写几行 `[EVT_A] = STAR_ENTRY(h, NULL), [EVT_B] = STAR_ENTRY(h, NULL)`，
 handler 里用 `evt` 参数区分是哪个纸条。
 
 **Q3：ctx 参数是干嘛的？**
-`MOTE_ENTRY(handler, ctx)` 的第二个参数，会原样传给 handler 的第三个参数。
-用来给 handler 配"工作台"：`MOTE_ENTRY(h, &my_device_config)`，一个 handler 服务多个设备。
+`STAR_ENTRY(handler, ctx)` 的第二个参数，会原样传给 handler 的第三个参数。
+用来给 handler 配"工作台"：`STAR_ENTRY(h, &my_device_config)`，一个 handler 服务多个设备。
 不需要就传 NULL。
 
 **Q4：post 的纸条一定按顺序处理吗？**
-筐是 FIFO（先进先出）。同一时刻最多排队 `MOTE_EVT_QUEUE_SIZE`（默认 16）张。
+筐是 FIFO（先进先出）。同一时刻最多排队 `STAR_EVT_QUEUE_SIZE`（默认 16）张。
 
 **Q5：没有注册的 ID 递进去会怎样？**
 纸条被内核默默丢掉，不会崩。这是安全网，但也说明你的值班表漏登记了。
-丢弃会被计入 `mote_dropped_count()` 并触发丢事件钩子（如果注册了）——
+丢弃会被计入 `star_dropped_count()` 并触发丢事件钩子（如果注册了）——
 所以漏登记的事件在可靠性监控里是"看得见"的，不是无声无息。
 
 **Q6：任务和"定时器+事件"到底选哪个？**
 任务 = 固定节奏的周期活（扫描、刷新、喂狗），且不需要在别处被触发；
 定时器+事件 = 触发式、灵活（暂停/改周期/多种事件混流）。
 
-**Q7：MOTE_DELAYED_MAX 用完了还能递延时纸条吗？**
-返回 `MOTE_ERR_FULL`。要么调大配置，要么改用定时器。
-注意延时槽是固定池（每次 poll 线性扫描 `MOTE_DELAYED_MAX` 个槽），
+**Q7：STAR_DELAYED_MAX 用完了还能递延时纸条吗？**
+返回 `STAR_ERR_FULL`。要么调大配置，要么改用定时器。
+注意延时槽是固定池（每次 poll 线性扫描 `STAR_DELAYED_MAX` 个槽），
 而定时器是**按到期时刻排序**的链表（每次 poll 只遍历到期节点，
 空转 O(1)），几十个定时器也没问题，不建议堆上百个（需要更多就用
 软件时间轮或换 RTOS）。
 
 **Q8：中断里想干点复杂的活？**
-正确姿势：中断只递纸条，把活写在 handler 里。这就是 MoteOS 的全部哲学。
+正确姿势：中断只递纸条，把活写在 handler 里。这就是 StardustOS 的全部哲学。
 
 **Q9：handler 里用 static 局部变量和用全局变量有区别吗？**
 功能上都是"永久存在"；区别是作用域：static 局部变量只有这个 handler 能碰，更安全，推荐。
@@ -903,16 +903,16 @@ handler 里用 `evt` 参数区分是哪个纸条。
 
 | 操作 | 临界区内做的事 | 规模 |
 |---|---|---|
-| `mote_event_post` | 队列入队 | O(1)，十几条指令 |
-| `mote_event_post_replace` | 从新到旧扫描队列找同 ID | O(队列长度)，最坏 = `MOTE_EVT_QUEUE_SIZE` |
-| `mote_event_post_delayed` / `_replace` / `mote_event_cancel_delayed` | 线性扫描延时槽池（找空槽/找同 ID） | O(`MOTE_DELAYED_MAX`) |
-| `mote_timer_start_ex` / `mote_timer_restart` | 排序链表插入（找插入点） | O(定时器数量)，几十个定时器仍很短 |
-| `mote_mail_send` | 拷贝 len 字节（≤ item_size）+ 事件入队 | O(len)，每 4 字节约几条指令 |
-| `mote_tick` / `mote_tick_advance` | 关中断 + 自增 + 恢复 | 约 10 条指令 |
+| `star_event_post` | 队列入队 | O(1)，十几条指令 |
+| `star_event_post_replace` | 从新到旧扫描队列找同 ID | O(队列长度)，最坏 = `STAR_EVT_QUEUE_SIZE` |
+| `star_event_post_delayed` / `_replace` / `star_event_cancel_delayed` | 线性扫描延时槽池（找空槽/找同 ID） | O(`STAR_DELAYED_MAX`) |
+| `star_timer_start_ex` / `star_timer_restart` | 排序链表插入（找插入点） | O(定时器数量)，几十个定时器仍很短 |
+| `star_mail_send` | 拷贝 len 字节（≤ item_size）+ 事件入队 | O(len)，每 4 字节约几条指令 |
+| `star_tick` / `star_tick_advance` | 关中断 + 自增 + 恢复 | 约 10 条指令 |
 
 > 前四项是**中断可调用** API（中断延迟 = 中断响应 + 其中最长者）；
 > 定时器 API 虽仅限主循环，其临界区同样会延迟中断响应。
-> `mote_next_due` 与睡眠判定只发生在主循环/空闲路径，不计入中断延迟。
+> `star_next_due` 与睡眠判定只发生在主循环/空闲路径，不计入中断延迟。
 
 **粗算公式**（48MHz 主频、-Os，按每字节 6~8 周期估算）：
 
@@ -924,15 +924,15 @@ handler 里用 `evt` 参数区分是哪个纸条。
 **这些是估算值，实际值必须实测**（编译器版本、Flash 等待周期、流水线都会影响）。
 两种实测方法：
 
-1. **DWT 周期计数器**（Cortex-M3 及以上）：`DWT->CYCCNT` 在 `mote_mail_send`
+1. **DWT 周期计数器**（Cortex-M3 及以上）：`DWT->CYCCNT` 在 `star_mail_send`
    前后打点取差值
 2. **GPIO 示波器法**（任何芯片）：进临界区前置高一个 GPIO、退出拉低，
-   对 `mote_mail_send`（最坏路径）打点，示波器量脉冲宽度即可覆盖最坏情况
+   对 `star_mail_send`（最坏路径）打点，示波器量脉冲宽度即可覆盖最坏情况
 
 实测值超预算时的对策（按性价比排序）：
 
 1. 缩小邮箱 `item_size`（延迟与它成正比）
-2. 缩小 `MOTE_EVT_QUEUE_SIZE`（replace 扫描与它成正比）
+2. 缩小 `STAR_EVT_QUEUE_SIZE`（replace 扫描与它成正比）
 3. 大块数据改走"指针 + 所有权移交"（自己保证生命周期，不拷贝）
 
 > 本内核**没有任何官方板级实测数据**，使用前请自行测量并在你的预算内做决定。
@@ -1008,7 +1008,7 @@ void USART1_IRQHandler(void)
     }
     if (USART1->SR & USART_SR_RXNE) {
         uint8_t c = (uint8_t)USART1->DR;
-        mote_mail_send(&uart_mb, &c, 1);      /* 接收仍走邮箱 */
+        star_mail_send(&uart_mb, &c, 1);      /* 接收仍走邮箱 */
     }
 }
 ```

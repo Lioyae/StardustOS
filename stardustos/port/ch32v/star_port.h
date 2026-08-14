@@ -1,19 +1,19 @@
 /*
- * MoteOS - event-driven cooperative kernel for small MCUs
+ * StardustOS - event-driven cooperative kernel for small MCUs
  * Copyright (c) 2026 Lioyae
- * https://github.com/Lioyae/MoteOS
+ * https://github.com/Lioyae/StardustOS
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef MOTE_PORT_H
-#define MOTE_PORT_H
+#ifndef STAR_PORT_H
+#define STAR_PORT_H
 
 /* WCH RISC-V（CH32V003/V007/V203/V307 等，WCH SPL）
  *
  * 器件头选择：默认 V2 代（CH32V003/V007）的 ch32v00x.h；
  * V3 代（CH32V203/V307）在工程宏定义里覆盖：
- *   -DMOTE_CH32_HAL_HEADER=<ch32v20x.h>   （V3 中型）
- *   -DMOTE_CH32_HAL_HEADER=<ch32v30x.h>   （V3 大型）
+ *   -DSTAR_CH32_HAL_HEADER=<ch32v20x.h>   （V3 中型）
+ *   -DSTAR_CH32_HAL_HEADER=<ch32v30x.h>   （V3 大型）
  * 各代 SDK 的器件头都在定义 IRQn_Type 之后才包含 core_riscv.h，
  * 因此换头后 __enable_irq/__disable_irq/SysTick 布局均可用。
  *
@@ -26,39 +26,39 @@
  *   __disable_irq = 写 0x6000（bit7=0 中断关闭）
  * 完整保存恢复该寄存器，支持嵌套、不破坏调用方状态 */
 
-#ifndef MOTE_CH32_HAL_HEADER
-#define MOTE_CH32_HAL_HEADER <ch32v00x.h>
+#ifndef STAR_CH32_HAL_HEADER
+#define STAR_CH32_HAL_HEADER <ch32v00x.h>
 #endif
-#include MOTE_CH32_HAL_HEADER
+#include STAR_CH32_HAL_HEADER
 
-/* 体系标签：mote_port.c 的 tickless 实现据此选择青稞 SysTick
+/* 体系标签：star_port.c 的 tickless 实现据此选择青稞 SysTick
  * 访问方式（64 位比较寄存器、向上计数） */
-#define MOTE_PORT_CH32 1
+#define STAR_PORT_CH32 1
 
 /* 青稞中断系统控制寄存器（INTSYSCR）的 CSR 编号。
  * ⚠ 同一 port 头文件服务 V2 代（CH32V003/V007）与 V3 代（CH32V203/V307），
  * 不同代次手册的 CSR 映射存在差异，默认值 0x800 以本 SDK 的 core_riscv.h
- * 口径为准；若目标代次不同，用 -DMOTE_CH32_INTSYSCR=<值> 覆盖。
+ * 口径为准；若目标代次不同，用 -DSTAR_CH32_INTSYSCR=<值> 覆盖。
  * 此寄存器直接决定临界区与 WFI 行为，上板前必须按目标芯片手册实测核验。 */
-#ifndef MOTE_CH32_INTSYSCR
-#define MOTE_CH32_INTSYSCR 0x800
+#ifndef STAR_CH32_INTSYSCR
+#define STAR_CH32_INTSYSCR 0x800
 #endif
 
-typedef uint32_t mote_crit_state_t;
+typedef uint32_t star_crit_state_t;
 
-/* 弱符号关键字：mote_port.c 的 SysTick_Handler 用弱符号定义，
- * 用户已有 SysTick 时直接重定义强符号即可接管，无需剔除 mote_port.c */
-#define MOTE_WEAK __attribute__((weak))
+/* 弱符号关键字：star_port.c 的 SysTick_Handler 用弱符号定义，
+ * 用户已有 SysTick 时直接重定义强符号即可接管，无需剔除 star_port.c */
+#define STAR_WEAK __attribute__((weak))
 
-static inline mote_crit_state_t mote_crit_enter(void)
+static inline star_crit_state_t star_crit_enter(void)
 {
-    mote_crit_state_t s;
-    __asm volatile("csrr %0, %[csr]" : "=r"(s) : [csr] "i" (MOTE_CH32_INTSYSCR));
+    star_crit_state_t s;
+    __asm volatile("csrr %0, %[csr]" : "=r"(s) : [csr] "i" (STAR_CH32_INTSYSCR));
     __disable_irq();
     return s;
 }
 
-static inline void mote_crit_exit(mote_crit_state_t s)
+static inline void star_crit_exit(star_crit_state_t s)
 {
     /* ⚠ 操作数编号陷阱：位置号 %0 永远指向第一个列出的操作数。
      * 这里 s 必须写在 %[csr]（命名立即数）之前，否则 %0 会指到 CSR
@@ -66,13 +66,13 @@ static inline void mote_crit_exit(mote_crit_state_t s)
      * MounRiver 的 WCH 汇编器抓出 "Improper CSRxI immediate (2048)"，
      * 而上游 xpack 汇编器放行（静默生成错误代码，且 s 永不写回） */
     __asm volatile("csrw %[csr], %0" : : "r"(s),
-                   [csr] "i" (MOTE_CH32_INTSYSCR) : "memory");
+                   [csr] "i" (STAR_CH32_INTSYSCR) : "memory");
 }
 
-static inline uint32_t mote_crit_active(void)
+static inline uint32_t star_crit_active(void)
 {
     uint32_t s;
-    __asm volatile("csrr %0, %[csr]" : "=r"(s) : [csr] "i" (MOTE_CH32_INTSYSCR));
+    __asm volatile("csrr %0, %[csr]" : "=r"(s) : [csr] "i" (STAR_CH32_INTSYSCR));
     return (s & 0x80u) ? 0u : 1u; /* bit7=0 表示中断被关闭 */
 }
 
