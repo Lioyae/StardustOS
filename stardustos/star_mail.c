@@ -18,7 +18,7 @@ static void star_copy(void *dst, const void *src, uint16_t n)
     uint8_t *d = (uint8_t *)dst;
     const uint8_t *s = (const uint8_t *)src;
 
-#if defined(__C51__) || defined(__C251__) || defined(__SDCC)
+#if defined(__C51__) || defined(__C251__) || defined(__SDCC) || defined(SDCC)
     while (n != 0) {
         *d++ = *s++;
         n--;

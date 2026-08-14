@@ -58,22 +58,20 @@ void star_timer0_isr(void) STAR_INTERRUPT(1)
 void star_idle(uint32_t next_due)
 {
     STAR_UNUSED_PARAM(next_due); /* 固定拍不使用 deadline */
-    /* 8051 空闲模式（PCON IDL）的唤醒条件存在厂商分歧：标准 8051 是
-     * "已使能中断源置位"（ET0=1 且 TF0=1）即可唤醒、EA 不必为 1；但部分
-     * 变体要求 EA=1 才算"已使能中断"。而本函数由内核在关中断（EA=0）下
-     * 调用，若硬件要求 EA=1 才能被中断唤醒，芯片将永远睡死（只能复位）。
-     *
-     * 因此默认实现为"空转不休眠"——主循环退化为轮询，绝对安全，代价是
-     * 失去空闲省电。需要低功耗时定义 STAR_PORT_IDLE 启用 IDL，但必须先：
-     *  1) 确认 tick 中断已使能（ET0=1）；
-     *  2) 上板实测"关中断进 IDL 能否被 tick 中断唤醒"（看空闲电流是否
-     *     下降、tick 是否准时）；
-     *  3) 若无法唤醒，改用"EA=1 进 IDL"的自定义 star_idle，并自行处理
-     *     查空到入睡之间丢事件的窗口（详见 docs/porting.md）。
-     */
+    /* 默认空转：绝对安全，主循环退化为轮询，不进入低功耗模式。 */
 #ifdef STAR_PORT_IDLE
-    STAR_PCON = STAR_PCON | 0x01u;   /* IDL=1：进空闲 */
-    STAR_PCON = STAR_PCON & 0xFEu;   /* 唤醒后清 IDL，下次可再进 */
+    /* 启用 PCON IDL 空闲（拆雷版）：
+     * 8051 空闲唤醒依赖"已使能中断"，而本函数在关中断（EA=0）下被调用，
+     * 直接进 IDL 可能睡死（不同厂商对 EA 的要求不一）。故由本函数自己
+     * 处理 EA：进 IDL 前临时开中断、唤醒后重新关中断，把唤醒交给 tick
+     * 中断——用户只需定义 STAR_PORT_IDLE，无需自写 EA 逻辑。
+     * 代价：开中断到进 IDL 之间投递的事件会延迟到下一 tick 才处理
+     * （≤1 拍，固定拍下每 1ms 兜底）——8051 无 ARM wfi 原子性的固有妥协，
+     * 远好过睡死。启用前仍建议上板实测空闲电流与唤醒是否正常。 */
+    STAR_EA = 1;                       /* 临时开中断，让 IDL 可被 tick 唤醒 */
+    STAR_PCON = STAR_PCON | 0x01u;     /* IDL=1：进空闲 */
+    STAR_PCON = STAR_PCON & 0xFEu;     /* 唤醒后清 IDL */
+    STAR_EA = 0;                       /* 恢复关中断，满足"返回时处临界区"契约 */
 #endif
 }
 

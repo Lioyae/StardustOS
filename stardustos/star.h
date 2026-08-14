@@ -117,12 +117,11 @@ void star_loop(void);
 
 /* 由移植层提供：进低功耗。入参为内核已知的下一到期节拍（见 star_next_due），
  * STAR_TICK_NONE 表示无待到期项。
- * 契约：内核在关中断状态下调用本函数（临界区内）。该契约源自 ARM/RISC-V 的
- * wfi 语义（pending 中断即可唤醒）；8051/251 的空闲模式（PCON IDL）唤醒条件
- * 与 EA 的关系因厂商而异、且未经板级验证，故 8051/251 移植默认把本函数实现
- * 为空转（见 port/star_port.c），启用真实低功耗前须上板验证唤醒行为。
- * 实现要求：极短（数十周期量级），不在此函数内开中断；会停掉 tick 时钟的
- * 深度睡眠（STOP/STANDBY/掉电等）不支持，需自行处理唤醒源与唤醒竞态。 */
+ * 契约：内核在关中断状态下调用本函数（临界区内）。8051/251 的空闲模式（PCON
+ * IDL）唤醒依赖 EA，故 8051/251 移植默认把本函数实现为空转；定义 STAR_PORT_IDLE
+ * 启用 IDL 时，由实现自行"进 IDL 前临时开中断、唤醒后重新关中断"（接受 ≤1 tick
+ * 丢唤醒兜底），无需用户改写本函数。实现须极短；会停掉 tick 时钟的深度睡眠
+ * （STOP/STANDBY/掉电等）不支持，需自行处理唤醒源与唤醒竞态。 */
 void star_idle(uint32_t next_due);
 
 star_status_t star_event_post(uint16_t evt, void *param);

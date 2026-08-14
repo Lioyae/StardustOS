@@ -35,7 +35,7 @@
 
 ## About
 
-StardustOS is a C event-driven cooperative kernel for small MCUs, focused on STC 8051 / 80251 microcontrollers (the kernel itself uses only ~280B of RAM by default).
+StardustOS is a C event-driven scheduling framework — a cooperative kernel (event queue + software timers + mailbox + optional task layer; not a preemptive RTOS) for small MCUs, focused on STC 8051 / 80251 microcontrollers (the kernel itself uses only ~280B of RAM by default).
 
 - No assembly source files in the kernel (the port layer accesses SFR/registers directly), no dynamic memory allocation, no blocking delay APIs
 - All RAM/Flash usage is fixed at compile time; CI automates unit tests, coverage, and SDCC compile checks
@@ -76,7 +76,7 @@ StardustOS is a C event-driven cooperative kernel for small MCUs, focused on STC
 | Timer | Statically defined; 32-bit wraparound-safe; list sorted by due time, expiry scan visits only due nodes (poll idle is O(1)); periodic timers fire on absolute phase (missed ticks coalesce, no cumulative drift); full-queue policies: retry / drop (strict deadline) / latest (replace semantics) |
 | Task layer | Periodic-callback convenience layer: descriptors in Flash (handler + ctx + period), slot pool in RAM, inactive tasks use no RAM (optional). Not RTOS tasks — no preemption, handlers are called synchronously by the main loop |
 | Mailbox | Static-slot deep copy, **enqueue-before-copy** atomic with event enqueue in one critical section; variable-length messages (1..item_size bytes per slot, item_size≤255, `recv` returns actual length, over-length rejected not truncated); invalid construction rejected at runtime (optional) |
-| Low power | Deadline-aware: `star_next_due()` exposes the next expiry; the kernel enters `star_idle(next_due)` only when the queue is empty and nothing is due. On 8051/251 `star_idle` spins by default (safe); define `STAR_PORT_IDLE` to enable PCON IDL idle mode after verifying wakeup on hardware. tickless (`STAR_TICKLESS=1`) has no 8051/251 implementation |
+| Low power | Deadline-aware: `star_next_due()` exposes the next expiry; the kernel enters `star_idle(next_due)` only when the queue is empty and nothing is due. On 8051/251 `star_idle` spins by default (safe); define `STAR_PORT_IDLE` to enable PCON IDL idle (star_idle toggles interrupts itself to wake, events delayed ≤1 tick). tickless (`STAR_TICKLESS=1`) has no 8051/251 implementation |
 | Critical section | Save/restore style (EA on 8051/251), nesting-safe |
 | Observability | `star_dropped_count()` unified drop counter + `star_set_drop_hook()` drop callback (event/mailbox APIs only inside the hook) |
 
