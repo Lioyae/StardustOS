@@ -16,19 +16,23 @@ typedef struct {
 
 static const star_task_desc_t *s_task_table;
 static uint16_t s_task_count;
-static star_task_slot_t s_slots[STAR_TASK_SLOT_MAX];
+STAR_STATIC star_task_slot_t s_slots[STAR_TASK_SLOT_MAX];
 
 void star_task_init(const star_task_desc_t *table, uint16_t count)
 {
+    uint8_t i;
+
     s_task_table = table;
     s_task_count = count;
-    for (uint8_t i = 0; i < STAR_TASK_SLOT_MAX; i++) {
+    for (i = 0; i < STAR_TASK_SLOT_MAX; i++) {
         s_slots[i].active = false;
     }
 }
 
 star_status_t star_task_start(uint16_t id)
 {
+    uint8_t i;
+
     if (id >= s_task_count) {
         return STAR_ERR_PARAM;
     }
@@ -39,12 +43,12 @@ star_status_t star_task_start(uint16_t id)
         s_task_table[id].period_ms >= 0x80000000u) {
         return STAR_ERR_PARAM;
     }
-    for (uint8_t i = 0; i < STAR_TASK_SLOT_MAX; i++) {
+    for (i = 0; i < STAR_TASK_SLOT_MAX; i++) {
         if (s_slots[i].active && s_slots[i].id == id) {
             return STAR_OK; /* 已启动 */
         }
     }
-    for (uint8_t i = 0; i < STAR_TASK_SLOT_MAX; i++) {
+    for (i = 0; i < STAR_TASK_SLOT_MAX; i++) {
         if (!s_slots[i].active) {
             s_slots[i].id = id;
             s_slots[i].due = star_ticks() + s_task_table[id].period_ms;
@@ -57,7 +61,9 @@ star_status_t star_task_start(uint16_t id)
 
 star_status_t star_task_stop(uint16_t id)
 {
-    for (uint8_t i = 0; i < STAR_TASK_SLOT_MAX; i++) {
+    uint8_t i;
+
+    for (i = 0; i < STAR_TASK_SLOT_MAX; i++) {
         if (s_slots[i].active && s_slots[i].id == id) {
             s_slots[i].active = false;
             return STAR_OK;
@@ -69,8 +75,9 @@ star_status_t star_task_stop(uint16_t id)
 void star_process_tasks(void)
 {
     uint32_t now = star_ticks();
+    uint8_t i;
 
-    for (uint8_t i = 0; i < STAR_TASK_SLOT_MAX; i++) {
+    for (i = 0; i < STAR_TASK_SLOT_MAX; i++) {
         star_task_slot_t *s = &s_slots[i];
         if (s->active && (int32_t)(now - s->due) >= 0) {
             const star_task_desc_t *d = &s_task_table[s->id];

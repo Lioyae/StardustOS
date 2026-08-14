@@ -30,7 +30,21 @@ extern "C" {
  * 4. 事件 ID 用连续枚举（从 0 起）；ID 即注册表下标，稀疏会浪费 Flash
  */
 
-typedef void (*star_handler_t)(uint16_t evt, void *param, void *ctx);
+/* C51/C251：多参数函数指针须 reentrant（参数走 reentrant 栈）。
+ * 非 reentrant 的间接调用参数放不进寄存器（R1-R7 共 7 字节，
+ * evt+param+ctx 达 8 字节）会报 C212。host（GCC）下为空。 */
+#if defined(__C51__) || defined(__C251__)
+#define STAR_REENTRANT reentrant
+#else
+#define STAR_REENTRANT
+#endif
+
+typedef void (*star_handler_t)(uint16_t evt, void *param, void *ctx) STAR_REENTRANT;
+
+/* 引用未使用参数：C51 对 (void)x 报 C275、C251 对 (void)x 与 x=x 均报
+ * C138（无效果表达式），而 if(x){} 在两个编译器下都不告警（GCC 亦然）。
+ * 统一用空 if 引用未使用参数。 */
+#define STAR_UNUSED_PARAM(x) do { if (x) { } } while (0)
 
 typedef enum {
     STAR_OK = 0,
@@ -197,7 +211,8 @@ void star_test_inject_set(void (*fn)(void));
         }                                                                      \
     } while (0)
 #else
-#define STAR_TEST_INJECT() ((void)0)
+/* C51 对 ((void)0) 报 C275（无效果表达式）：未启用时展开为空语句 */
+#define STAR_TEST_INJECT()
 #endif
 
 #if STAR_ENABLE_TASK
@@ -248,11 +263,11 @@ typedef struct {
  * 为 0、或邮箱字段非法（slots==0 / buf/lens 为 NULL / item_size 越界）返回
  * STAR_ERR_PARAM，不静默截断）。入箱与事件入队在同一临界区原子完成。
  * 中断上下文可调用（拷贝成本与 len 成正比，计入中断延迟）。 */
-star_status_t star_mail_send(star_mail_t *mb, const void *data, uint16_t len);
+star_status_t star_mail_send(star_mail_t *mb, const void *src, uint16_t len);
 /* 取最早一箱：返回实际存入的字节数（1..item_size），空箱返回 -1；
  * 邮箱字段非法（含槽长度域被写坏为 0 或 >item_size）同样返回 -1。
  * 仅限主循环上下文调用。 */
-int star_mail_recv(star_mail_t *mb, void *data);
+int star_mail_recv(star_mail_t *mb, void *dst);
 
 #endif
 

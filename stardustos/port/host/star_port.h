@@ -16,6 +16,11 @@
 
 #define STAR_PORT_HOST
 
+/* 与其它 port 统一的内核存储/链接宏：GCC 下等价于 static */
+#define STAR_STATIC static
+#define STAR_WEAK __attribute__((weak))
+#define STAR_INLINE static inline
+
 typedef uint32_t star_crit_state_t;
 
 extern uint32_t star_host_primask;
@@ -24,19 +29,19 @@ extern uint32_t star_host_primask;
 extern uint32_t star_host_idle_count;
 extern uint32_t star_host_idle_last_due;
 
-static inline star_crit_state_t star_crit_enter(void)
+STAR_INLINE star_crit_state_t star_crit_enter(void)
 {
     star_crit_state_t s = star_host_primask;
     star_host_primask = 1;
     return s;
 }
 
-static inline void star_crit_exit(star_crit_state_t s)
+STAR_INLINE void star_crit_exit(star_crit_state_t s)
 {
     star_host_primask = s;
 }
 
-static inline uint32_t star_crit_active(void)
+STAR_INLINE uint32_t star_crit_active(void)
 {
     return star_host_primask;
 }

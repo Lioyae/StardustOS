@@ -51,7 +51,7 @@ static bool star_mail_invalid(const star_mail_t *mb)
            mb->head >= mb->slots || mb->count > mb->slots;
 }
 
-star_status_t star_mail_send(star_mail_t *mb, const void *data, uint16_t len)
+star_status_t star_mail_send(star_mail_t *mb, const void *src, uint16_t len)
 {
     star_status_t st;
     star_crit_state_t cs;
@@ -59,7 +59,7 @@ star_status_t star_mail_send(star_mail_t *mb, const void *data, uint16_t len)
     /* 定长上限 + 变长下限：len 必须 1..item_size。
      * 此前超长静默截断、不足 item_size 时 recv 回吐整格残留垃圾，
      * 接收端无法知道实际长度；现在每槽记录实际存入长度 */
-    if (star_mail_invalid(mb) || data == NULL || len == 0 ||
+    if (star_mail_invalid(mb) || src == NULL || len == 0 ||
         len > mb->item_size) {
         return STAR_ERR_PARAM;
     }
@@ -88,7 +88,7 @@ star_status_t star_mail_send(star_mail_t *mb, const void *data, uint16_t len)
             if (idx >= mb->slots) {
                 idx -= mb->slots; /* head+count < 2*slots，一次减法足够 */
             }
-            star_copy(&mb->buf[idx * mb->item_size], data, len);
+            star_copy(&mb->buf[idx * mb->item_size], src, len);
             mb->lens[idx] = (uint8_t)len;
             mb->count++;
         }
@@ -98,12 +98,12 @@ star_status_t star_mail_send(star_mail_t *mb, const void *data, uint16_t len)
     return st;
 }
 
-int star_mail_recv(star_mail_t *mb, void *data)
+int star_mail_recv(star_mail_t *mb, void *dst)
 {
     int n;
     star_crit_state_t cs;
 
-    if (star_mail_invalid(mb) || data == NULL) {
+    if (star_mail_invalid(mb) || dst == NULL) {
         return -1;
     }
 
@@ -120,7 +120,7 @@ int star_mail_recv(star_mail_t *mb, void *data)
         if (n < 1 || n > mb->item_size) {
             n = -1;
         } else {
-            star_copy(data, &mb->buf[mb->head * mb->item_size], (uint16_t)n);
+            star_copy(dst, &mb->buf[mb->head * mb->item_size], (uint16_t)n);
             if (mb->head + 1 >= mb->slots) {
                 mb->head = 0;
             } else {

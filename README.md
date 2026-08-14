@@ -42,24 +42,23 @@ StardustOS 是面向小容量单片机（2KB RAM / 16KB Flash 级别）的 C99 �
 
 - 内核无汇编源文件（移植层使用内联汇编；仍需厂商启动文件/向量表）、无动态内存分配、无阻塞延时 API
 - 全部 RAM/Flash 用量在编译期确定，链接器可验证，CI 交叉编译并断言内核体积
-- 支持 ARM Cortex-M0+/M3 与 RISC-V；中断延迟 = tick 中断 + 内核临界区（事件入队 O(1)；邮箱拷贝与 item_size 成正比；post_replace 与队列长度成正比）。临界区时长随配置与主频变化，**需按平台实测**（估算公式与实测方法见 [使用教程附录 A](docs/usage.md)）
+- 支持 8051（STC8H/8A、STC89C52、STC8051U/8052U，Keil C51）、80251（STC32G，Keil C251）与宿主机（x86）；中断延迟 = tick 中断 + 内核临界区（事件入队 O(1)；邮箱拷贝与 item_size 成正比；post_replace 与队列长度成正比）。临界区时长随配置与主频变化，**需按平台实测**（估算公式与实测方法见 [使用教程附录 A](docs/usage.md)）
 
 ## 项目状态（重要）
 
 **开发预览（v0.x），未经板级验证。**
 
-- ✅ 已验证：宿主机单元测试/交错测试（含 ASan/UBSan、多随机种子）、断言开启构建、最坏配置构建（队列 255）、**QEMU 冒烟测试**（Cortex-M3 固定拍：启动/向量表/SysTick/tick→定时器→事件流；**tickless 档：空闲入账/nap 重装/固定拍恢复/漂移检测，时间膨胀执行**）、**gcov 覆盖率门槛（行覆盖 ≥85%）**、**cppcheck 静态分析**、M0+/M3/RV32 交叉编译与体积断言、真实 SDK 例程编译——全部由 CI 自动化
-- ❌ 未验证：内核尚未在任何真实芯片上运行过。中断时序、临界区实测时长、WFI 低功耗唤醒（含青稞 INTSYSCR 与 WFI 的交互）、周期定时器相位漂移，均无板级实测数据（tickless 入账逻辑已有 QEMU 冒烟覆盖，但深睡/wfi 长保持路径仅限板级验证）
+- ✅ 已验证：宿主机单元测试/交错测试（含 ASan/UBSan、多随机种子）、断言开启构建、最坏配置构建（队列 255）、**gcov 覆盖率门槛（行覆盖 ≥85%）**、**cppcheck 静态分析**——由 CI 自动化；**8051（Keil C51）与 80251（Keil C251）内核全量编译 0 警告 0 错误**（C251 有未引用 static 函数的无害 C174 提示）
+- ❌ 未验证：内核尚未在任何真实芯片上运行过。中断时序、临界区实测时长、8051/251 空闲模式（PCON IDL）唤醒、周期定时器相位漂移，均无板级实测数据
 - ⚠️ 生产项目使用前，请先按 [移植检查清单](docs/porting.md) 完成板级验证。v1.0.x 的"生产就绪"标签已撤销（见 [更新日志](CHANGELOG.md)）
 
 ## 支持平台
 
-| 内核 | 芯片示例 |
-|---|---|
-| RISC-V（WCH 青稞） | CH32V003 / CH32V007 / CH32V203 / CH32V307 |
-| Cortex-M0+ | CIU32F003 / CH32M030 / STM32F030 |
-| Cortex-M3 | STM32F103 |
-| x86（宿主机） | PC 上运行内核单元测试 |
+| 内核 | 编译器 | 芯片示例 |
+|---|---|---|
+| 8051 | Keil C51 | STC8H / STC8A / STC89C52 / STC8051U / STC8052U |
+| 80251 | Keil C251 | STC32G |
+| x86（宿主机） | GCC | PC 上运行内核单元测试 |
 
 > 除宿主机外，以上平台均**仅通过交叉编译验证，未上板运行**。
 
@@ -67,10 +66,9 @@ StardustOS 是面向小容量单片机（2KB RAM / 16KB Flash 级别）的 C99 �
 
 | 项 | 占用 |
 |---|---|
-| 内核 Flash（三件套） | Cortex-M0+ 实测 2297B、RV32 以 CI 为准（交叉编译 -Os 实测 star.o/star_task.o/star_mail.o；断言 M0+ <2.5KB、RV32 <2.75KB） |
-| 移植层 Flash | `star_port.o` 固定拍 <512B（CI 单独断言）；tickless 另加约 320~360B（仅 port 层） |
-| 内核 RAM | 默认配置约 280B（事件队列 16 槽 + 延时槽 4 + 任务槽 4），CI 断言 <512B（含移植层静态量） |
-| 完整点灯例程 | CH32V003 全工程手动实测：FLASH 2.7KB / RAM 712B（含启动文件与栈；**CI 不校验例程体积**）。注意：712B 已占 2KB RAM 的 35%，剩余需留给应用数据与栈 |
+| 内核 RAM（默认配置） | 约 280B（事件队列 16 槽 + 延时槽 4 + 任务槽 4），编译期确定；8051 下大数组默认放 `idata`，可 `-DSTAR_RAM_CLASS=xdata` 搬到 XRAM |
+| 内核 Flash | 纯逻辑、编译期确定；8051/251 请以链接后 size 为准（Keil 编译未进 Linux CI） |
+| 完整点灯例程 | 见 `examples/stc8h` / `stc89c52` / `stc32g`（需 STC-ISP 生成的器件头文件） |
 
 ## 模块
 
@@ -82,7 +80,7 @@ StardustOS 是面向小容量单片机（2KB RAM / 16KB Flash 级别）的 C99 �
 | 任务层 | 周期回调便捷层：描述符在 Flash（handler + ctx + 周期），状态槽池在 RAM，未启动的任务不占 RAM（可选编译）。注意：**不是 RTOS 任务**——不抢占、handler 被主循环直接同步调用、与事件队列无关 |
 | 邮箱 | 静态槽深拷贝，**先入队后入箱**、与事件入队同一临界区原子完成（入队失败邮箱不动，全有或全无，无回滚窗口）；变长消息（每槽 1..item_size 字节且 item_size≤255，`recv` 返回实际存入长度，超长拒绝不截断，每槽额外 1 字节长度开销）；非法构造（slots==0/空指针等）运行时拒绝（可选编译） |
 | 低功耗 | deadline 感知：`star_next_due()` 暴露最近到期时刻，空闲时队列空且无到期项才进 `star_idle(next_due)`；可选 **tickless**（`STAR_TICKLESS=1`）按下一 deadline 重装 SysTick 再 wfi，唤醒后恢复固定拍。竞态处理经推理正确，但**各芯片（尤其青稞）的 WFI 行为未经板级验证** |
-| 临界区 | 保存/恢复式（PRIMASK / INTSYSCR），支持嵌套 |
+| 临界区 | 保存/恢复式（8051/251 用 EA、ARM 用 PRIMASK），支持嵌套 |
 | 可观测性 | `star_dropped_count()` 统一丢事件计数 + `star_set_drop_hook()` 丢事件回调（钩子仅限事件/邮箱 API） |
 
 ## 快速开始
@@ -94,18 +92,21 @@ enum { EVT_BLINK = 0 };
 
 static star_timer_t blink_timer;
 
-static void blink_handler(uint16_t evt, void *param, void *ctx)
+static void blink_handler(uint16_t evt, void *param, void *ctx) STAR_REENTRANT
 {
+    STAR_UNUSED_PARAM(evt);
+    STAR_UNUSED_PARAM(param);
+    STAR_UNUSED_PARAM(ctx);
     led_toggle();
 }
 
 static const star_evt_entry_t evt_table[] = {
-    [EVT_BLINK] = STAR_ENTRY(blink_handler, NULL),
+    STAR_ENTRY(blink_handler, NULL),  /* 顺序初始化：EVT_BLINK=0（C51 不支持指定初始化器） */
 };
 
 int main(void)
 {
-    systick_start(1);  /* 1ms tick，ISR 内调用 star_tick() */
+    tick_start(1);  /* 1ms tick：8051 用 Timer0、ARM 用 SysTick，ISR 内调用 star_tick() */
     star_init(evt_table, sizeof(evt_table) / sizeof(evt_table[0]));
     star_timer_start(&blink_timer, EVT_BLINK, NULL, 500, true);
 
@@ -118,7 +119,7 @@ int main(void)
 - 🌐 [StardustOS 中文文档（在线）](https://stardustos.zane-leo.top/)：使用教程 / 移植教程 / 提问指南
 - [移植教程](docs/porting.md)：Keil / MounRiver 工程集成、SysTick 冲突处理、非 CMSIS 芯片移植、检查清单
 - [使用教程](docs/usage.md)：术语表、事件 / 定时器 / 邮箱 / 任务层逐行详解、完整实战项目
-- [测试文档](docs/test.md)：测试矩阵、交错测试设计、QEMU 冒烟、覆盖率与静态分析、本地运行方法
+- [测试文档](docs/test.md)：测试矩阵、交错测试设计、覆盖率与静态分析、本地运行方法
 
 ## 使用规则
 
@@ -169,8 +170,8 @@ stardustos/
 ├── star_config.h            # 唯一配置点
 ├── star_task.c              # 任务层（可选编译）
 ├── star_mail.c              # 邮箱（可选编译）
-└── port/                    # 移植层（按内核分目录：ch32v / cm0plus / cm3 / host）
-examples/                    # 各芯片例程
+└── port/                    # 移植层（按内核分目录：8051 / 251 / host）
+examples/                    # STC 例程（stc8h / stc89c52 / stc32g）
 tests/                       # PC 单元测试
 docs/                        # 移植与使用教程
 brand/                       # 品牌资源

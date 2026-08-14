@@ -12,7 +12,9 @@ typedef struct {
     void *param;
 } star_qitem_t;
 
-static struct {
+/* 事件队列：体积最大（每槽 evt+param），8051 下放 idata/xdata（见
+ * STAR_STATIC）；标量仍放 data（直接寻址，临界区路径最快） */
+STAR_STATIC struct {
     star_qitem_t items[STAR_EVT_QUEUE_SIZE];
     uint8_t head;
     uint8_t count;
@@ -37,7 +39,7 @@ void star_test_inject_set(void (*fn)(void))
 #endif
 
 #if STAR_DELAYED_MAX > 0
-static struct {
+STAR_STATIC struct {
     uint32_t due;
     uint16_t evt;
     void *param;
@@ -86,8 +88,12 @@ void star_init(const star_evt_entry_t *evt_table, uint16_t evt_count)
     s_timers = NULL;
     s_dropped = 0;
 #if STAR_DELAYED_MAX > 0
-    for (int i = 0; i < STAR_DELAYED_MAX; i++) {
-        s_delayed[i].used = 0;
+    {
+        int i;
+
+        for (i = 0; i < STAR_DELAYED_MAX; i++) {
+            s_delayed[i].used = 0;
+        }
     }
 #endif
 }
@@ -160,12 +166,13 @@ star_status_t star_event_post_replace(uint16_t evt, void *param)
 {
     star_status_t st;
     star_crit_state_t cs;
+    uint8_t i;
 
     STAR_TEST_INJECT();
     cs = star_crit_enter();
 
     /* 从新到旧查找：覆盖最新一条同 ID 事件（latest wins） */
-    for (uint8_t i = s_q.count; i > 0; i--) {
+    for (i = s_q.count; i > 0; i--) {
         unsigned idx = (unsigned)s_q.head + i - 1;
 
         if (idx >= STAR_EVT_QUEUE_SIZE) {
@@ -330,7 +337,9 @@ star_status_t star_timer_restart(star_timer_t *t, uint32_t ms)
  * 三个 delayed API 共用，避免各自内联一份线性扫描 */
 static int star_delayed_find_free(void)
 {
-    for (int i = 0; i < STAR_DELAYED_MAX; i++) {
+    int i;
+
+    for (i = 0; i < STAR_DELAYED_MAX; i++) {
         if (!s_delayed[i].used) {
             return i;
         }
@@ -340,7 +349,9 @@ static int star_delayed_find_free(void)
 
 static int star_delayed_find_evt(uint16_t evt, void *param, bool match_param)
 {
-    for (int i = 0; i < STAR_DELAYED_MAX; i++) {
+    int i;
+
+    for (i = 0; i < STAR_DELAYED_MAX; i++) {
         if (s_delayed[i].used && s_delayed[i].evt == evt &&
             (!match_param || s_delayed[i].param == param)) {
             return i;
@@ -355,13 +366,14 @@ star_status_t star_event_post_delayed(uint16_t evt, void *param, uint32_t ms)
     /* 时长运行时校验（与定时器 API 同口径，不依赖可被关闭的 STAR_ASSERT）：
      * ms==0 语义含糊（等于"下一拍投递"），直接拒绝；
      * ms≥2^31 破坏回绕比较的数学边界（约 24.8 天） */
+#if STAR_DELAYED_MAX > 0
+    star_status_t st;
+    star_crit_state_t cs;
+#endif
     if (ms == 0 || ms >= 0x80000000u) {
         return STAR_ERR_PARAM;
     }
 #if STAR_DELAYED_MAX > 0
-    star_status_t st;
-    star_crit_state_t cs;
-
     cs = star_crit_enter();
 
     {
@@ -399,13 +411,14 @@ star_status_t star_event_post_delayed_replace(uint16_t evt, void *param,
                                               uint32_t ms)
 {
     /* 时长运行时校验：与 star_event_post_delayed 同口径 */
+#if STAR_DELAYED_MAX > 0
+    star_status_t st;
+    star_crit_state_t cs;
+#endif
     if (ms == 0 || ms >= 0x80000000u) {
         return STAR_ERR_PARAM;
     }
 #if STAR_DELAYED_MAX > 0
-    star_status_t st;
-    star_crit_state_t cs;
-
     cs = star_crit_enter();
 
     {
@@ -549,8 +562,9 @@ static void star_process_timers(void)
         /* 整个槽池扫描共用一段临界区（此前每槽一对临界区）：
          * 更短代码、更稳的中断延迟；事件投递的嵌套临界区安全 */
         star_crit_state_t cs = star_crit_enter();
+        int i;
 
-        for (int i = 0; i < STAR_DELAYED_MAX; i++) {
+        for (i = 0; i < STAR_DELAYED_MAX; i++) {
             uint16_t evt;
             void *param;
             bool fire = s_delayed[i].used &&
@@ -608,9 +622,12 @@ bool star_poll(void)
 static uint32_t star_next_due_locked(void)
 {
     uint32_t best = (s_timers != NULL) ? s_timers->due : STAR_TICK_NONE;
+#if STAR_DELAYED_MAX > 0
+    int i;
+#endif
 
 #if STAR_DELAYED_MAX > 0
-    for (int i = 0; i < STAR_DELAYED_MAX; i++) {
+    for (i = 0; i < STAR_DELAYED_MAX; i++) {
         if (s_delayed[i].used &&
             (best == STAR_TICK_NONE ||
              (int32_t)(s_delayed[i].due - best) < 0)) {

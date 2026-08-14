@@ -42,24 +42,23 @@ StardustOS is a C99 event-driven cooperative kernel for small MCUs (2KB RAM / 16
 
 - No assembly source files in the kernel (port layer uses inline assembly; vendor startup files/vector tables are still required), no dynamic memory allocation, no blocking delay APIs
 - All RAM/Flash usage is fixed at compile time; CI cross-compiles and asserts kernel size
-- Supports ARM Cortex-M0+/M3 and RISC-V; interrupt latency = tick interrupt + kernel critical sections (event enqueue O(1); mailbox copy proportional to item_size; post_replace proportional to queue length). Critical-section duration depends on configuration and clock, and **must be measured per platform** (estimation formulas and measurement methods in the [usage guide appendix A](docs/usage.md))
+- Supports 8051 (STC8H/8A, STC89C52, STC8051U/8052U, Keil C51), 80251 (STC32G, Keil C251), and host (x86); interrupt latency = tick interrupt + kernel critical sections (event enqueue O(1); mailbox copy proportional to item_size; post_replace proportional to queue length). Critical-section duration depends on configuration and clock, and **must be measured per platform** (estimation formulas and measurement methods in the [usage guide appendix A](docs/usage.md))
 
 ## Project Status (Important)
 
 **Development preview (v0.x), not board-verified.**
 
-- ✅ Verified: host unit/interleave tests (ASan/UBSan, multi-seed), assert-enabled build, worst-case config build (queue 255), **QEMU smoke test** (Cortex-M3: boot/vector table/SysTick/tick→timer→event flow), **gcov coverage gate (≥85% lines)**, **cppcheck static analysis**, M0+/M3/RV32 cross-compilation with size assertions, real-SDK example compilation — all automated by CI
-- ❌ Not verified: the kernel has never run on real silicon. Interrupt timing, measured critical-section duration, WFI low-power wakeup (including QingKe INTSYSCR/WFI interaction), and periodic-timer phase drift have no board-level measurements
+- ✅ Verified: host unit/interleave tests (ASan/UBSan, multi-seed), assert-enabled build, worst-case config build (queue 255), **gcov coverage gate (≥85% lines)**, **cppcheck static analysis** — all automated by CI; **8051 (Keil C51) and 80251 (Keil C251) kernel compile cleanly with 0 warnings/0 errors** (C251 emits harmless C174 for unreferenced static functions)
+- ❌ Not verified: the kernel has never run on real silicon. Interrupt timing, measured critical-section duration, 8051/251 idle-mode (PCON IDL) wakeup, and periodic-timer phase drift have no board-level measurements
 - ⚠️ Before production use, complete the board-level verification per the [porting checklist](docs/porting.md). The v1.0.x "production ready" tags have been retracted (see [CHANGELOG](CHANGELOG.md))
 
 ## Supported Platforms
 
-| Core | Example chips |
-|---|---|
-| RISC-V (WCH QingKe) | CH32V003 / CH32V007 / CH32V203 / CH32V307 |
-| Cortex-M0+ | CIU32F003 / CH32M030 / STM32F030 |
-| Cortex-M3 | STM32F103 |
-| x86 (host) | Runs kernel unit tests on PC |
+| Core | Compiler | Example chips |
+|---|---|---|
+| 8051 | Keil C51 | STC8H / STC8A / STC89C52 / STC8051U / STC8052U |
+| 80251 | Keil C251 | STC32G |
+| x86 (host) | GCC | Runs kernel unit tests on PC |
 
 > Except for the host, all platforms above are **verified by cross-compilation only; never run on hardware**.
 
@@ -67,10 +66,9 @@ StardustOS is a C99 event-driven cooperative kernel for small MCUs (2KB RAM / 16
 
 | Item | Usage |
 |---|---|
-| Kernel Flash (core trio) | Cortex-M0+ measured 2297B, RV32 per CI (cross-compiles star.o/star_task.o/star_mail.o at -Os; asserts M0+ <2.5KB, RV32 <2.75KB) |
-| Port layer Flash | star_port.o <512B fixed-tick (CI asserts separately); tickless adds ~320-360B (port layer only) |
-| Kernel RAM | ~280B with default config (event queue 16 slots + delayed 4 + task slots 4); CI asserts <512B (including port layer statics) |
-| Full blink example | Manually measured on CH32V003: FLASH 2.7KB / RAM 712B (including startup and stack; **example size is not CI-asserted**). Note: 712B is 35% of a 2KB RAM — the rest must cover app data and stack |
+| Kernel RAM (default) | ~280B (event queue 16 slots + delayed 4 + task slots 4), compile-time fixed; on 8051 large arrays default to `idata`, use `-DSTAR_RAM_CLASS=xdata` to move them to XRAM |
+| Kernel Flash | Pure logic, compile-time fixed; on 8051/251 check linked size (Keil builds are not part of Linux CI) |
+| Full blink example | See `examples/stc8h` / `stc89c52` / `stc32g` (requires STC-ISP generated device headers) |
 
 ## Modules
 
