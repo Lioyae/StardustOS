@@ -35,7 +35,7 @@
 
 ## About
 
-StardustOS is a C99 event-driven cooperative kernel for small MCUs (2KB RAM / 16KB Flash class), focused on STC 8051 / 80251 microcontrollers.
+StardustOS is a C99 event-driven cooperative kernel for small MCUs, focused on STC 8051 / 80251 microcontrollers (the kernel itself uses only ~280B of RAM by default).
 
 - No assembly source files in the kernel (the port layer accesses SFR/registers directly), no dynamic memory allocation, no blocking delay APIs
 - All RAM/Flash usage is fixed at compile time; CI automates unit tests, coverage, and SDCC compile checks
