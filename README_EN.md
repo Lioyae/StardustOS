@@ -21,7 +21,7 @@
     <img src="https://img.shields.io/github/v/tag/Lioyae/StardustOS?style=for-the-badge&color=2b6cb0" alt="Version">
   </a>
   <a href="https://github.com/Lioyae/StardustOS">
-    <img src="https://img.shields.io/badge/language-C99-2b6cb0?style=for-the-badge" alt="C99">
+    <img src="https://img.shields.io/badge/language-C-2b6cb0?style=for-the-badge" alt="C">
   </a>
   <a href="https://github.com/Lioyae/StardustOS/stargazers">
     <img src="https://img.shields.io/github/stars/Lioyae/StardustOS?style=for-the-badge&color=d69e2e" alt="Stars">
@@ -35,7 +35,7 @@
 
 ## About
 
-StardustOS is a C99 event-driven cooperative kernel for small MCUs, focused on STC 8051 / 80251 microcontrollers (the kernel itself uses only ~280B of RAM by default).
+StardustOS is a C event-driven cooperative kernel for small MCUs, focused on STC 8051 / 80251 microcontrollers (the kernel itself uses only ~280B of RAM by default).
 
 - No assembly source files in the kernel (the port layer accesses SFR/registers directly), no dynamic memory allocation, no blocking delay APIs
 - All RAM/Flash usage is fixed at compile time; CI automates unit tests, coverage, and SDCC compile checks

@@ -21,7 +21,7 @@
     <img src="https://img.shields.io/github/v/tag/Lioyae/StardustOS?style=for-the-badge&color=2b6cb0" alt="Version">
   </a>
   <a href="https://github.com/Lioyae/StardustOS">
-    <img src="https://img.shields.io/badge/language-C99-2b6cb0?style=for-the-badge" alt="C99">
+    <img src="https://img.shields.io/badge/language-C-2b6cb0?style=for-the-badge" alt="C">
   </a>
   <a href="https://github.com/Lioyae/StardustOS/stargazers">
     <img src="https://img.shields.io/github/stars/Lioyae/StardustOS?style=for-the-badge&color=d69e2e" alt="Stars">
@@ -35,7 +35,7 @@
 
 ## 简介
 
-StardustOS 是面向小容量单片机的 C99 事件驱动协作式内核，聚焦 STC 系列 8051 / 80251 单片机（默认配置内核本体仅约 280B RAM）。
+StardustOS 是面向小容量单片机的 C 语言事件驱动协作式内核，聚焦 STC 系列 8051 / 80251 单片机（默认配置内核本体仅约 280B RAM）。
 
 - 内核无汇编源文件（移植层直接操作 SFR/寄存器）、无动态内存分配、无阻塞延时 API
 - 全部 RAM/Flash 用量在编译期确定，链接器可验证；CI 自动化单元测试、覆盖率与 SDCC 编译验证
